@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cursor Motion JS - Standalone Test</title>
+<title>Cursor Motion JS - Test v2</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -37,11 +37,7 @@ body {
   border-color: rgba(100,255,180,0.8);
   box-shadow: 0 0 18px rgba(100,255,180,0.3);
 }
-@keyframes pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(0.88); }
-  100% { transform: scale(1); }
-}
+@keyframes pulse { 0%{transform:scale(1)} 50%{transform:scale(0.88)} 100%{transform:scale(1)} }
 #controls {
   position: absolute; top: 16px; left: 16px;
   background: rgba(20,22,40,0.92);
@@ -89,421 +85,382 @@ body {
     </div>
   </div>
   <button id="run-btn">Run Sequence</button>
-  <div id="info">Click anywhere or click targets to test. Phase: <span id="i-phase">idle</span> | Pos: <span id="i-pos">-</span></div>
+  <div id="info">Click anywhere or click targets to test. Phase: <span id="i-phase">idle</span> | Pos: <span id="i-pos">-</span> | Angle: <span id="i-angle">-</span></div>
 </div>
 
 <script>
 // ============================================================
-// INLINED: vec2.js
+// vec2
 // ============================================================
 const EPS = 1e-9;
-function v(x, y) { return { x, y }; }
-function vec_add(a, b) { return { x: a.x + b.x, y: a.y + b.y }; }
-function vec_sub(a, b) { return { x: a.x - b.x, y: a.y - b.y }; }
-function vec_scale(a, s) { return { x: a.x * s, y: a.y * s }; }
-function vec_length(a) { return Math.hypot(a.x, a.y); }
-function vec_normalize(a, fallback = { x: 1, y: 0 }) {
-  const len = vec_length(a);
-  if (len < EPS) return fallback;
-  return { x: a.x / len, y: a.y / len };
-}
-function perpendicular(a) { return { x: -a.y, y: a.x }; }
-function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
-function signedAngle(lhs, rhs) {
-  return Math.atan2(lhs.x * rhs.y - lhs.y * rhs.x, lhs.x * rhs.x + lhs.y * rhs.y);
-}
-function pointInBounds(p, bounds, padding = 0) {
-  if (!bounds) return true;
-  return p.x >= bounds.minX - padding && p.x <= bounds.maxX + padding &&
-         p.y >= bounds.minY - padding && p.y <= bounds.maxY + padding;
+function vec_add(a,b){return{x:a.x+b.x,y:a.y+b.y}}
+function vec_sub(a,b){return{x:a.x-b.x,y:a.y-b.y}}
+function vec_scale(a,s){return{x:a.x*s,y:a.y*s}}
+function vec_length(a){return Math.hypot(a.x,a.y)}
+function vec_normalize(a,fb={x:1,y:0}){const l=vec_length(a);return l<EPS?fb:{x:a.x/l,y:a.y/l}}
+function perpendicular(a){return{x:-a.y,y:a.x}}
+function clamp(v,mn,mx){return Math.max(mn,Math.min(mx,v))}
+function signedAngle(l,r){return Math.atan2(l.x*r.y-l.y*r.x,l.x*r.x+l.y*r.y)}
+function pointInBounds(p,b,pad=0){
+  if(!b)return true;
+  return p.x>=b.minX-pad&&p.x<=b.maxX+pad&&p.y>=b.minY-pad&&p.y<=b.maxY+pad;
 }
 
 // ============================================================
-// INLINED: path.js
+// path
 // ============================================================
-function makeSegment(end, control1, control2) { return { end, control1, control2 }; }
-function makePath({ start, end, startControl = null, arc = null, arcIn = null, arcOut = null, endControl = null, segments }) {
-  return { start, end, startControl, arc, arcIn, arcOut, endControl, segments };
+function makeSegment(end,c1,c2){return{end,control1:c1,control2:c2}}
+function makePath({start,end,startControl=null,endControl=null,segments}){
+  return{start,end,startControl,endControl,segments};
 }
-function sampleCubic(p0, c1, c2, p1, t) {
-  const omt = 1 - t, omt2 = omt * omt, t2 = t * t;
-  const a = omt2 * omt, b = 3 * omt2 * t, c = 3 * omt * t2, d = t2 * t;
-  return { x: a*p0.x + b*c1.x + c*c2.x + d*p1.x, y: a*p0.y + b*c1.y + c*c2.y + d*p1.y };
+function sampleCubic(p0,c1,c2,p1,t){
+  const o=1-t,o2=o*o,t2=t*t;
+  return{x:o2*o*p0.x+3*o2*t*c1.x+3*o*t2*c2.x+t2*t*p1.x,
+         y:o2*o*p0.y+3*o2*t*c1.y+3*o*t2*c2.y+t2*t*p1.y};
 }
-function sampleCubicTangent(p0, c1, c2, p1, t) {
-  const omt = 1 - t;
-  return {
-    x: 3*omt*omt*(c1.x-p0.x) + 6*omt*t*(c2.x-c1.x) + 3*t*t*(p1.x-c2.x),
-    y: 3*omt*omt*(c1.y-p0.y) + 6*omt*t*(c2.y-c1.y) + 3*t*t*(p1.y-c2.y),
-  };
+function sampleCubicTangent(p0,c1,c2,p1,t){
+  const o=1-t;
+  return{x:3*o*o*(c1.x-p0.x)+6*o*t*(c2.x-c1.x)+3*t*t*(p1.x-c2.x),
+         y:3*o*o*(c1.y-p0.y)+6*o*t*(c2.y-c1.y)+3*t*t*(p1.y-c2.y)};
 }
-function samplePath(path, progress) {
-  const segs = path.segments;
-  if (!segs || segs.length === 0) return { point: path.start, tangent: { x: 1, y: 0 } };
-  const clamped = clamp(progress, 0, 1);
-  const segCount = segs.length;
-  let segIndex, localT;
-  if (clamped >= 1) { segIndex = segCount - 1; localT = 1; }
-  else { const scaled = clamped * segCount; segIndex = Math.min(Math.floor(scaled), segCount - 1); localT = scaled - segIndex; }
-  const seg = segs[segIndex];
-  const segStart = segIndex === 0 ? path.start : segs[segIndex - 1].end;
-  const point = sampleCubic(segStart, seg.control1, seg.control2, seg.end, localT);
-  const rawTangent = sampleCubicTangent(segStart, seg.control1, seg.control2, seg.end, localT);
-  return { point, tangent: vec_normalize(rawTangent, { x: 1, y: 0 }) };
+function samplePath(path,progress){
+  const segs=path.segments;
+  if(!segs||!segs.length)return{point:path.start,tangent:{x:1,y:0}};
+  const c=clamp(progress,0,1),n=segs.length;
+  let si,lt;
+  if(c>=1){si=n-1;lt=1}else{const s=c*n;si=Math.min(Math.floor(s),n-1);lt=s-si}
+  const seg=segs[si];
+  const segStart=si===0?path.start:segs[si-1].end;
+  const pt=sampleCubic(segStart,seg.control1,seg.control2,seg.end,lt);
+  const tg=sampleCubicTangent(segStart,seg.control1,seg.control2,seg.end,lt);
+  return{point:pt,tangent:vec_normalize(tg,{x:1,y:0})};
 }
-function measurePath(path, bounds = null, samplesPerSegment = 24, minStepDistance = 0.01) {
-  let totalLength = 0, angleChangeEnergy = 0, maxAngleChange = 0, totalTurn = 0;
-  let staysInBounds = bounds ? pointInBounds(path.start, bounds, 20) : true;
-  let prev = path.start, prevAngle = null;
-  const totalSteps = Math.max(path.segments.length * Math.max(samplesPerSegment, 1), 1);
-  for (let step = 1; step <= totalSteps; step++) {
-    const progress = step / totalSteps;
-    const { point } = samplePath(path, progress);
-    const dx = point.x - prev.x, dy = point.y - prev.y;
-    const stepLen = Math.hypot(dx, dy);
-    if (bounds && staysInBounds) staysInBounds = pointInBounds(point, bounds, 20);
-    if (stepLen > minStepDistance) {
-      const angle = Math.atan2(dy, dx);
-      totalLength += stepLen;
-      if (prevAngle !== null) {
-        let delta = angle - prevAngle;
-        while (delta > Math.PI) delta -= 2 * Math.PI;
-        while (delta < -Math.PI) delta += 2 * Math.PI;
-        angleChangeEnergy += delta * delta;
-        const abs = Math.abs(delta);
-        if (abs > maxAngleChange) maxAngleChange = abs;
-        totalTurn += abs;
-      }
-      prevAngle = angle;
-      prev = point;
+function measurePath(path,bounds=null){
+  let len=0,ace=0,mac=0,tt=0;
+  let sib=bounds?pointInBounds(path.start,bounds,20):true;
+  let prev=path.start,prevA=null;
+  const steps=Math.max(path.segments.length*24,1);
+  for(let i=1;i<=steps;i++){
+    const{point}=samplePath(path,i/steps);
+    const dx=point.x-prev.x,dy=point.y-prev.y,sl=Math.hypot(dx,dy);
+    if(bounds&&sib)sib=pointInBounds(point,bounds,20);
+    if(sl>0.01){
+      const a=Math.atan2(dy,dx);len+=sl;
+      if(prevA!==null){let d=a-prevA;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;ace+=d*d;const ab=Math.abs(d);if(ab>mac)mac=ab;tt+=ab}
+      prevA=a;prev=point;
     }
   }
-  return { length: totalLength, angleChangeEnergy, maxAngleChange, totalTurn, staysInBounds };
+  return{length:len,angleChangeEnergy:ace,maxAngleChange:mac,totalTurn:tt,staysInBounds:sib};
 }
 
 // ============================================================
-// INLINED: spring.js
+// spring (progress)
 // ============================================================
-const TWO_PI = Math.PI * 2;
-function buildSpringConfig({ response = 1.4, dampingFraction = 0.9, dt = 1/240, idleVelocityThreshold = 28800, closeEnoughProgressThreshold = 1, closeEnoughDistanceThreshold = 0.01 } = {}) {
-  const rawStiffness = response > 0 ? Math.pow(TWO_PI / response, 2) : Infinity;
-  const stiffness = Math.min(rawStiffness, idleVelocityThreshold);
-  const drag = 2 * dampingFraction * Math.sqrt(stiffness);
-  return { response, dampingFraction, stiffness, drag, dt, closeEnoughProgressThreshold, closeEnoughDistanceThreshold, idleVelocityThreshold };
+const TWO_PI=Math.PI*2;
+function buildSpringConfig({response=1.4,dampingFraction=0.9,dt=1/240,idleVelocityThreshold=28800,closeEnoughProgressThreshold=1,closeEnoughDistanceThreshold=0.01}={}){
+  const raw=response>0?Math.pow(TWO_PI/response,2):Infinity;
+  const stiffness=Math.min(raw,idleVelocityThreshold);
+  const drag=2*dampingFraction*Math.sqrt(stiffness);
+  return{response,dampingFraction,stiffness,drag,dt,closeEnoughProgressThreshold,closeEnoughDistanceThreshold,idleVelocityThreshold};
 }
-const OFFICIAL_SPRING = buildSpringConfig();
-function makeSpringState() { return { time: 0, velocity: 0, force: 0 }; }
-function advanceStep(current, target, state, config) {
-  const halfDt = config.dt * 0.5;
-  const velocityHalf = state.velocity + state.force * halfDt;
-  const nextCurrent = current + velocityHalf * config.dt;
-  const force = config.stiffness * (target - nextCurrent) + -config.drag * velocityHalf;
-  const velocity = velocityHalf + force * halfDt;
-  return [nextCurrent, { time: state.time + config.dt, velocity, force }];
+const OFFICIAL_SPRING=buildSpringConfig();
+function makeSpringState(){return{time:0,velocity:0,force:0}}
+function advanceStep(cur,tgt,s,cfg){
+  const h=cfg.dt*0.5;
+  const vh=s.velocity+s.force*h;
+  const nc=cur+vh*cfg.dt;
+  const f=cfg.stiffness*(tgt-nc)+(-cfg.drag)*vh;
+  return[nc,{time:s.time+cfg.dt,velocity:vh+f*h,force:f}];
 }
-function advanceTo(current, target, state, targetTime, config) {
-  let cur = current, s = state;
-  const gap = targetTime - s.time;
-  if (gap > 1) s = { ...s, time: targetTime - 1/60 };
-  let safety = 0;
-  const maxIters = Math.max(8192, Math.ceil(gap / config.dt) + 64);
-  while (s.time < targetTime && safety < maxIters) { [cur, s] = advanceStep(cur, target, s, config); safety++; }
-  return [cur, s];
+function advanceTo(cur,tgt,s,tt,cfg){
+  let c=cur,st=s;const gap=tt-st.time;
+  if(gap>1)st={...st,time:tt-1/60};
+  let safe=0;const mx=Math.max(8192,Math.ceil(gap/cfg.dt)+64);
+  while(st.time<tt&&safe<mx){[c,st]=advanceStep(c,tgt,st,cfg);safe++}
+  return[c,st];
 }
-function isCloseEnough(progress, target, config) {
-  return progress >= config.closeEnoughProgressThreshold && Math.abs(target - progress) <= config.closeEnoughDistanceThreshold;
-}
-function computeCloseEnoughTime(config) {
-  let current = 0, state = makeSpringState();
-  for (let step = 1; step < 4096; step++) {
-    const t = step * config.dt;
-    [current, state] = advanceTo(current, 1, state, t, config);
-    if (isCloseEnough(current, 1, config)) return state.time;
-  }
+function isCloseEnough(p,t,cfg){return p>=cfg.closeEnoughProgressThreshold&&Math.abs(t-p)<=cfg.closeEnoughDistanceThreshold}
+function computeCloseEnoughTime(cfg){
+  let c=0,s=makeSpringState();
+  for(let i=1;i<4096;i++){const t=i*cfg.dt;[c,s]=advanceTo(c,1,s,t,cfg);if(isCloseEnough(c,1,cfg))return s.time}
   return 1.43;
 }
 
 // ============================================================
-// INLINED: candidates.js
+// candidates
 // ============================================================
-const DESCRIPTORS = [
-  { id:'direct', family:'direct', kind:'base', side:0, arcScale:0.55, startReachScale:1.0, endReachScale:1.0, startNormalScale:0.35, endNormalScale:0.35, startLineWeight:1.0, startHeadingWeight:0.45, startGuideNormalBias:0.0, endLineWeight:1.0, endHeadingWeight:0.55, endGuideNormalBias:0.0, flowShift:0, startFlowWeight:0.7, endFlowWeight:0.7, scoreBias:0 },
-  { id:'turn-left', family:'turn', kind:'arched', side:-1, arcScale:1.0, startReachScale:1.05, endReachScale:0.95, startNormalScale:1.0, endNormalScale:0.5, startLineWeight:0.55, startHeadingWeight:0.85, startGuideNormalBias:0.25, endLineWeight:0.85, endHeadingWeight:0.55, endGuideNormalBias:0.05, flowShift:-0.05, startFlowWeight:0.9, endFlowWeight:0.6, scoreBias:0 },
-  { id:'turn-right', family:'turn', kind:'arched', side:1, arcScale:1.0, startReachScale:1.05, endReachScale:0.95, startNormalScale:1.0, endNormalScale:0.5, startLineWeight:0.55, startHeadingWeight:0.85, startGuideNormalBias:0.25, endLineWeight:0.85, endHeadingWeight:0.55, endGuideNormalBias:0.05, flowShift:-0.05, startFlowWeight:0.9, endFlowWeight:0.6, scoreBias:0 },
-  { id:'brake-left', family:'brake', kind:'arched', side:-1, arcScale:0.9, startReachScale:0.85, endReachScale:1.15, startNormalScale:0.4, endNormalScale:1.0, startLineWeight:0.85, startHeadingWeight:0.5, startGuideNormalBias:0.05, endLineWeight:0.55, endHeadingWeight:0.85, endGuideNormalBias:0.25, flowShift:0.07, startFlowWeight:0.6, endFlowWeight:0.9, scoreBias:6 },
-  { id:'brake-right', family:'brake', kind:'arched', side:1, arcScale:0.9, startReachScale:0.85, endReachScale:1.15, startNormalScale:0.4, endNormalScale:1.0, startLineWeight:0.55, startHeadingWeight:0.85, startGuideNormalBias:0.25, endLineWeight:0.85, endHeadingWeight:0.5, endGuideNormalBias:0.05, flowShift:0.07, startFlowWeight:0.6, endFlowWeight:0.9, scoreBias:6 },
-  { id:'orbit-left', family:'orbit', kind:'arched', side:-1, arcScale:1.35, startReachScale:1.15, endReachScale:1.15, startNormalScale:1.0, endNormalScale:1.0, startLineWeight:0.5, startHeadingWeight:0.9, startGuideNormalBias:0.35, endLineWeight:0.5, endHeadingWeight:0.9, endGuideNormalBias:0.35, flowShift:0, startFlowWeight:0.8, endFlowWeight:0.8, scoreBias:12 },
-  { id:'orbit-right', family:'orbit', kind:'arched', side:1, arcScale:1.35, startReachScale:1.15, endReachScale:1.15, startNormalScale:1.0, endNormalScale:1.0, startLineWeight:0.5, startHeadingWeight:0.9, startGuideNormalBias:0.35, endLineWeight:0.5, endHeadingWeight:0.9, endGuideNormalBias:0.35, flowShift:0, startFlowWeight:0.8, endFlowWeight:0.8, scoreBias:12 },
+const DESCRIPTORS=[
+  {id:'direct',family:'direct',kind:'base',side:0,arcScale:0.55,startReachScale:1.0,endReachScale:1.0,startNormalScale:0.35,endNormalScale:0.35,startLineWeight:1.0,startHeadingWeight:0.45,startGuideNormalBias:0.0,endLineWeight:1.0,endHeadingWeight:0.55,endGuideNormalBias:0.0,flowShift:0,startFlowWeight:0.7,endFlowWeight:0.7,scoreBias:0},
+  {id:'turn-left',family:'turn',kind:'arched',side:-1,arcScale:1.0,startReachScale:1.05,endReachScale:0.95,startNormalScale:1.0,endNormalScale:0.5,startLineWeight:0.55,startHeadingWeight:0.85,startGuideNormalBias:0.25,endLineWeight:0.85,endHeadingWeight:0.55,endGuideNormalBias:0.05,flowShift:-0.05,startFlowWeight:0.9,endFlowWeight:0.6,scoreBias:0},
+  {id:'turn-right',family:'turn',kind:'arched',side:1,arcScale:1.0,startReachScale:1.05,endReachScale:0.95,startNormalScale:1.0,endNormalScale:0.5,startLineWeight:0.55,startHeadingWeight:0.85,startGuideNormalBias:0.25,endLineWeight:0.85,endHeadingWeight:0.55,endGuideNormalBias:0.05,flowShift:-0.05,startFlowWeight:0.9,endFlowWeight:0.6,scoreBias:0},
+  {id:'brake-left',family:'brake',kind:'arched',side:-1,arcScale:0.9,startReachScale:0.85,endReachScale:1.15,startNormalScale:0.4,endNormalScale:1.0,startLineWeight:0.85,startHeadingWeight:0.5,startGuideNormalBias:0.05,endLineWeight:0.55,endHeadingWeight:0.85,endGuideNormalBias:0.25,flowShift:0.07,startFlowWeight:0.6,endFlowWeight:0.9,scoreBias:6},
+  {id:'brake-right',family:'brake',kind:'arched',side:1,arcScale:0.9,startReachScale:0.85,endReachScale:1.15,startNormalScale:0.4,endNormalScale:1.0,startLineWeight:0.55,startHeadingWeight:0.85,startGuideNormalBias:0.25,endLineWeight:0.85,endHeadingWeight:0.5,endGuideNormalBias:0.05,flowShift:0.07,startFlowWeight:0.6,endFlowWeight:0.9,scoreBias:6},
+  {id:'orbit-left',family:'orbit',kind:'arched',side:-1,arcScale:1.35,startReachScale:1.15,endReachScale:1.15,startNormalScale:1.0,endNormalScale:1.0,startLineWeight:0.5,startHeadingWeight:0.9,startGuideNormalBias:0.35,endLineWeight:0.5,endHeadingWeight:0.9,endGuideNormalBias:0.35,flowShift:0,startFlowWeight:0.8,endFlowWeight:0.8,scoreBias:12},
+  {id:'orbit-right',family:'orbit',kind:'arched',side:1,arcScale:1.35,startReachScale:1.15,endReachScale:1.15,startNormalScale:1.0,endNormalScale:1.0,startLineWeight:0.5,startHeadingWeight:0.9,startGuideNormalBias:0.35,endLineWeight:0.5,endHeadingWeight:0.9,endGuideNormalBias:0.35,flowShift:0,startFlowWeight:0.8,endFlowWeight:0.8,scoreBias:12},
 ];
-
-function resolveGuide({ line, forward, normal, sideSign, lineWeight, headingWeight, normalBias }) {
-  const lin = vec_scale(line, lineWeight);
-  const fwd = vec_scale(forward, headingWeight);
-  const nrm = vec_scale(normal, normalBias * sideSign);
-  return vec_normalize({ x: lin.x + fwd.x + nrm.x, y: lin.y + fwd.y + nrm.y }, line);
+function resolveGuide({line,forward,normal,sideSign,lineWeight,headingWeight,normalBias}){
+  const lin=vec_scale(line,lineWeight),fwd=vec_scale(forward,headingWeight),nrm=vec_scale(normal,normalBias*sideSign);
+  return vec_normalize({x:lin.x+fwd.x+nrm.x,y:lin.y+fwd.y+nrm.y},line);
 }
-function makePathFromDescriptor({ start, end, descriptor, startForward, endForward, params }) {
-  const delta = vec_sub(end, start);
-  const distance = Math.max(vec_length(delta), 1);
-  const direction = vec_normalize(delta, { x: 1, y: 0 });
-  const normal = perpendicular(direction);
-  const farFactor = Math.min(distance / 800, 1);
-  const startHandle = params.startHandle ?? 0.29;
-  const endHandle = params.endHandle ?? 0.08;
-  const arcSize = params.arcSize ?? 0.06;
-  const arcFlow = params.arcFlow ?? 0.64;
-  const resolvedFlow = clamp(arcFlow + descriptor.flowShift, 0, 1);
-  const flowBias = (resolvedFlow - 0.5) * distance * 0.18;
-  const baseStartReach = distance * (0.10 + startHandle * 0.56);
-  const baseEndReach = distance * (0.11 + endHandle * 0.62);
-  const distanceLift = 0.68 + farFactor * 0.56;
-  const baseArcHeight = Math.min(Math.max(distance * (0.10 + arcSize * 0.92) * descriptor.arcScale * distanceLift, 20), distance * 0.96);
-  const sideSign = descriptor.side;
-  const arcVector = { x: normal.x * baseArcHeight * sideSign, y: normal.y * baseArcHeight * sideSign };
-  const startGuide = resolveGuide({ line: direction, forward: startForward, normal, sideSign, lineWeight: descriptor.startLineWeight, headingWeight: descriptor.startHeadingWeight, normalBias: descriptor.startGuideNormalBias });
-  const endGuide = resolveGuide({ line: direction, forward: endForward, normal, sideSign, lineWeight: descriptor.endLineWeight, headingWeight: descriptor.endHeadingWeight, normalBias: descriptor.endGuideNormalBias });
-  const startReach = Math.max(baseStartReach * descriptor.startReachScale + flowBias * descriptor.startFlowWeight, 12);
-  const endReach = Math.max(baseEndReach * descriptor.endReachScale - flowBias * descriptor.endFlowWeight, 12);
-  const c1Base = vec_add(start, vec_scale(startGuide, startReach));
-  const c2Base = vec_sub(end, vec_scale(endGuide, endReach));
-  const control1 = { x: c1Base.x + arcVector.x * descriptor.startNormalScale, y: c1Base.y + arcVector.y * descriptor.startNormalScale };
-  const control2 = { x: c2Base.x + arcVector.x * descriptor.endNormalScale, y: c2Base.y + arcVector.y * descriptor.endNormalScale };
-  return makePath({ start, end, startControl: control1, endControl: control2, segments: [makeSegment(end, control1, control2)] });
+function makePathFromDescriptor({start,end,descriptor:d,startForward,endForward,params}){
+  const delta=vec_sub(end,start),dist=Math.max(vec_length(delta),1),dir=vec_normalize(delta,{x:1,y:0}),norm=perpendicular(dir);
+  const ff=Math.min(dist/800,1);
+  const sh=params.startHandle??0.29,eh=params.endHandle??0.08,as=params.arcSize??0.06,af=params.arcFlow??0.64;
+  const rf=clamp(af+d.flowShift,0,1),fb=(rf-0.5)*dist*0.18;
+  const bsr=dist*(0.10+sh*0.56),ber=dist*(0.11+eh*0.62),dl=0.68+ff*0.56;
+  const bah=Math.min(Math.max(dist*(0.10+as*0.92)*d.arcScale*dl,20),dist*0.96);
+  const ss=d.side,av={x:norm.x*bah*ss,y:norm.y*bah*ss};
+  const sg=resolveGuide({line:dir,forward:startForward,normal:norm,sideSign:ss,lineWeight:d.startLineWeight,headingWeight:d.startHeadingWeight,normalBias:d.startGuideNormalBias});
+  const eg=resolveGuide({line:dir,forward:endForward,normal:norm,sideSign:ss,lineWeight:d.endLineWeight,headingWeight:d.endHeadingWeight,normalBias:d.endGuideNormalBias});
+  const sr=Math.max(bsr*d.startReachScale+fb*d.startFlowWeight,12);
+  const er=Math.max(ber*d.endReachScale-fb*d.endFlowWeight,12);
+  const c1b=vec_add(start,vec_scale(sg,sr)),c2b=vec_sub(end,vec_scale(eg,er));
+  const c1={x:c1b.x+av.x*d.startNormalScale,y:c1b.y+av.y*d.startNormalScale};
+  const c2={x:c2b.x+av.x*d.endNormalScale,y:c2b.y+av.y*d.endNormalScale};
+  return makePath({start,end,startControl:c1,endControl:c2,segments:[makeSegment(end,c1,c2)]});
 }
-function preferredTurnSide(start, end, startForward) {
-  const delta = vec_sub(end, start);
-  const dir = vec_normalize(delta, { x: 1, y: 0 });
-  const cross = startForward.x * dir.y - startForward.y * dir.x;
-  if (cross > 0.05) return 1;
-  if (cross < -0.05) return -1;
-  return 0;
-}
-function turnDemand(startForward, endForward, start, end) {
-  const delta = vec_sub(end, start);
-  const dir = vec_normalize(delta, { x: 1, y: 0 });
-  const startTurn = Math.abs(signedAngle(startForward, dir));
-  const endTurn = Math.abs(signedAngle(dir, endForward));
-  return Math.min(1, (startTurn + endTurn) / Math.PI);
-}
-function scoreCandidate({ path, measurement, descriptor, context }) {
-  const distance = Math.max(context.distance, 1);
-  const excessLength = Math.max(measurement.length / distance - 1, 0);
-  let score = descriptor.scoreBias;
-  score += excessLength * 180;
-  score += measurement.angleChangeEnergy * 90;
-  score += measurement.maxAngleChange * 85;
-  score += measurement.totalTurn * (descriptor.side === 0 ? 10 : 12);
-  if (descriptor.side === 0) score += context.turnDemand * 130;
-  else {
-    score += context.directness * 90;
-    if (descriptor.side !== context.preferredSide && context.preferredSide !== 0) score += Math.max(context.turnDemand, 0.45) * 200;
-  }
-  if (!measurement.staysInBounds) score += 45;
-  return score;
-}
-function makeCandidates({ start, end, bounds = null, startForward = {x:1,y:0}, endForward = {x:1,y:0}, params = {} }) {
-  const sf = vec_normalize(startForward, {x:1,y:0});
-  const ef = vec_normalize(endForward, {x:1,y:0});
-  const distance = Math.max(vec_length(vec_sub(end, start)), 1);
-  const preferredSide = preferredTurnSide(start, end, sf);
-  const td = turnDemand(sf, ef, start, end);
-  const directness = 1 - td;
-  const context = { distance, turnDemand: td, directness, preferredSide };
-  return DESCRIPTORS.map(descriptor => {
-    const path = makePathFromDescriptor({ start, end, descriptor, startForward: sf, endForward: ef, params });
-    const measurement = measurePath(path, bounds);
-    const score = scoreCandidate({ path, measurement, descriptor, context });
-    return { id: descriptor.id, kind: descriptor.kind, side: descriptor.side, descriptor, path, measurement, score };
+function makeCandidates({start,end,bounds=null,startForward={x:1,y:0},endForward={x:1,y:0},params={}}){
+  const sf=vec_normalize(startForward,{x:1,y:0}),ef=vec_normalize(endForward,{x:1,y:0});
+  const dist=Math.max(vec_length(vec_sub(end,start)),1);
+  const delta2=vec_sub(end,start),dir2=vec_normalize(delta2,{x:1,y:0});
+  const cross=sf.x*dir2.y-sf.y*dir2.x;
+  const ps=cross>0.05?1:cross<-0.05?-1:0;
+  const st2=Math.abs(signedAngle(sf,dir2)),et2=Math.abs(signedAngle(dir2,ef));
+  const td=Math.min(1,(st2+et2)/Math.PI),dn=1-td;
+  const ctx={distance:dist,turnDemand:td,directness:dn,preferredSide:ps};
+  return DESCRIPTORS.map(d=>{
+    const path=makePathFromDescriptor({start,end,descriptor:d,startForward:sf,endForward:ef,params});
+    const m=measurePath(path,bounds);
+    const el=Math.max(m.length/dist-1,0);
+    let score=d.scoreBias;
+    score+=el*180+m.angleChangeEnergy*90+m.maxAngleChange*85+m.totalTurn*(d.side===0?10:12);
+    if(d.side===0)score+=td*130;else{score+=dn*90;if(d.side!==ps&&ps!==0)score+=Math.max(td,0.45)*200}
+    if(!m.staysInBounds)score+=45;
+    return{id:d.id,kind:d.kind,side:d.side,path,measurement:m,score};
   });
 }
-function chooseCandidate(candidates) {
-  if (!candidates || candidates.length === 0) return null;
-  const inBounds = candidates.filter(c => c.measurement.staysInBounds);
-  const pool = inBounds.length > 0 ? inBounds : candidates;
-  let best = pool[0];
-  for (const c of pool) { if (c.score < best.score) best = c; }
+function chooseCandidate(cands){
+  if(!cands||!cands.length)return null;
+  const ib=cands.filter(c=>c.measurement.staysInBounds);
+  const pool=ib.length>0?ib:cands;
+  let best=pool[0];for(const c of pool)if(c.score<best.score)best=c;
   return best;
 }
 
 // ============================================================
-// Engine (simplified inline)
+// Visual Dynamics — Velocity-Verlet spring for tip + angle
+// Matches reference: tipSpring(0.18, 0.76), angleSpring(0.24, 0.82)
+// baseHeading = -(3π/4), headingVelocityFloor = 14
 // ============================================================
+function makeVisualSpring(response,dampingFraction,dt=1/240){
+  const raw=response>0?Math.pow(2*Math.PI/response,2):Infinity;
+  const stiffness=Math.min(raw,28800);
+  const drag=2*dampingFraction*Math.sqrt(stiffness);
+  return{stiffness,drag,dt};
+}
+const TIP_SPRING=makeVisualSpring(0.18,0.76);
+const ANGLE_SPRING=makeVisualSpring(0.24,0.82);
+const BASE_HEADING=-(3*Math.PI/4); // -135° cursor resting direction
+const HEADING_VEL_FLOOR=14;
+const WOBBLE_AMP=Math.PI/12;
+
+function normalizeAngle(a){let v=a;while(v>Math.PI)v-=2*Math.PI;while(v<-Math.PI)v+=2*Math.PI;return v}
+
 class VisualDynamics {
-  constructor() { this.tip = null; this.velocity = {x:0,y:0}; this.angle = 0; this.lastTime = null; }
-  reset(point) { this.tip = {x:point.x,y:point.y}; this.velocity={x:0,y:0}; this.angle=0; this.lastTime=null; }
-  advance(target, time, { idleAngleOffset=0 }={}) {
-    if (!this.tip) { this.tip={x:target.x,y:target.y}; this.lastTime=time; return {tip:this.tip,angle:this.angle,velocity:this.velocity}; }
-    const dt = this.lastTime==null ? 1/60 : clamp(time-this.lastTime, 1/240, 1/30);
-    this.lastTime = time;
-    const k = 1 - Math.exp(-dt/0.06);
-    const nx = this.tip.x + (target.x-this.tip.x)*k;
-    const ny = this.tip.y + (target.y-this.tip.y)*k;
-    this.velocity = {x:(nx-this.tip.x)/dt, y:(ny-this.tip.y)/dt};
-    this.tip = {x:nx, y:ny};
-    const speed = Math.hypot(this.velocity.x, this.velocity.y);
-    if (speed > 4) {
-      const ta = Math.atan2(this.velocity.y, this.velocity.x);
-      const ak = 1-Math.exp(-dt/0.08);
-      let d = ta-this.angle; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
-      this.angle += d*ak;
-    } else {
-      const ak = 1-Math.exp(-dt/0.16);
-      this.angle += (0-this.angle)*ak;
+  constructor(){this.tip=null;this.tvx=0;this.tvy=0;this.tfx=0;this.tfy=0;this.angle=0;this.av=0;this.af=0;this.time=0}
+  reset(p){this.tip={x:p.x,y:p.y};this.tvx=0;this.tvy=0;this.tfx=0;this.tfy=0;this.angle=0;this.av=0;this.af=0;this.time=0}
+  advance(target,targetTime,{idleAngleOffset=0}={}){
+    if(!this.tip){this.tip={x:target.x,y:target.y};this.time=targetTime;return this._render(idleAngleOffset)}
+    if((targetTime-this.time)>1)this.time=targetTime-1/60;
+    while(this.time<targetTime)this._step(target,idleAngleOffset);
+    return this._render(idleAngleOffset);
+  }
+  _step(tp,iao){
+    const dt=TIP_SPRING.dt,h=dt*0.5;
+    // tip 2D verlet
+    const vhx=this.tvx+this.tfx*h, vhy=this.tvy+this.tfy*h;
+    const nx=this.tip.x+vhx*dt, ny=this.tip.y+vhy*dt;
+    const dx=tp.x-nx, dy=tp.y-ny;
+    const fx=dx*TIP_SPRING.stiffness+(-TIP_SPRING.drag)*vhx;
+    const fy=dy*TIP_SPRING.stiffness+(-TIP_SPRING.drag)*vhy;
+    this.tvx=vhx+fx*h; this.tvy=vhy+fy*h;
+    this.tfx=fx; this.tfy=fy;
+    this.tip={x:nx,y:ny};
+    // angle 1D verlet
+    const speed=Math.hypot(this.tvx,this.tvy);
+    let ta;
+    if(speed>HEADING_VEL_FLOOR){
+      const heading=Math.atan2(this.tvy,this.tvx);
+      ta=normalizeAngle(heading-BASE_HEADING);
+    } else { ta=0; }
+    const avh=this.av+this.af*h;
+    const na=normalizeAngle(this.angle+avh*dt);
+    const ae=normalizeAngle(ta-na);
+    const aforce=ae*ANGLE_SPRING.stiffness+(-ANGLE_SPRING.drag)*avh;
+    this.av=avh+aforce*h;
+    this.af=aforce;
+    this.angle=normalizeAngle(na);
+    this.time+=dt;
+  }
+  _render(iao){
+    const ci=clamp(iao,-0.28,0.28);
+    const rot=normalizeAngle(this.angle+ci);
+    const speed=Math.hypot(this.tvx,this.tvy);
+    let bx=0,by=0,fox=0,foy=0,fop=0.12,fsc=1;
+    if(speed>0.001){
+      const dirx=this.tvx/speed,diry=this.tvy/speed;
+      const bm=-Math.min(speed*0.0012,2.4);
+      bx=dirx*bm;by=diry*bm;
+      const fm=-Math.min(speed*0.0045,9);
+      fox=dirx*fm;foy=diry*fm;
+      fop=Math.min(0.12+speed*0.00006,0.34);
+      fsc=1+Math.min(speed*0.00012,0.22);
     }
-    return { tip:this.tip, angle:this.angle+idleAngleOffset, velocity:this.velocity };
+    return{tip:this.tip,angle:rot,velocity:{x:this.tvx,y:this.tvy},bodyOffset:{x:bx,y:by},fogOffset:{x:fox,y:foy},fogOpacity:fop,fogScale:fsc};
   }
 }
 
+// ============================================================
+// Engine
+// ============================================================
 class CursorMotionEngine {
-  constructor({ initial={x:0,y:0}, bounds=null, spring=OFFICIAL_SPRING, params={}, onUpdate=()=>{}, onStateChange=()=>{}, idle=true }={}) {
-    this.bounds = bounds;
-    this.spring = spring;
-    this.params = { startHandle:0.29, endHandle:0.08, arcSize:0.06, arcFlow:0.64, ...params };
-    this.onUpdate = onUpdate;
-    this.onStateChange = onStateChange;
-    this.duration = computeCloseEnoughTime(spring);
-    this.idleEnabled = idle;
-    this.position = {x:initial.x, y:initial.y};
-    this.target = {x:initial.x, y:initial.y};
-    this.heading = {x:1,y:0};
-    this.phase = 'idle';
-    this.idlePhase = 0;
-    this.clickProgress = 0;
-    this.dynamics = new VisualDynamics();
-    this.dynamics.reset(this.position);
-    this._rafId = null;
-    this._currentMove = null;
-    if (this.idleEnabled) this._startLoop();
+  constructor({initial={x:0,y:0},bounds=null,spring=OFFICIAL_SPRING,params={},onUpdate=()=>{},idle=true}={}){
+    this.bounds=bounds;this.spring=spring;
+    this.params={startHandle:0.29,endHandle:0.08,arcSize:0.06,arcFlow:0.64,...params};
+    this.onUpdate=onUpdate;this.duration=computeCloseEnoughTime(spring);
+    this.idleEnabled=idle;this.position={x:initial.x,y:initial.y};
+    this.target={...this.position};this.heading={x:1,y:0};this.phase='idle';
+    this.idlePhase=0;this.clickProgress=0;
+    this.dynamics=new VisualDynamics();this.dynamics.reset(this.position);
+    this._rafId=null;this._move=null;
+    if(this.idleEnabled)this._startLoop();
   }
-  setParams(p) { this.params = {...this.params,...p}; }
-  setSpring(cfg) { this.spring = cfg; this.duration = computeCloseEnoughTime(cfg); }
-  moveTo(target) {
-    if (this._currentMove) { this._currentMove.cancelled=true; this._currentMove.reject?.(new Error('superseded')); this._currentMove=null; }
-    const start = {x:this.position.x, y:this.position.y};
-    const cands = makeCandidates({ start, end:target, bounds:this.bounds, startForward:this.heading, endForward:{x:1,y:0}, params:this.params });
-    const chosen = chooseCandidate(cands);
-    if (!chosen) { this.position={...target}; return Promise.resolve(); }
-    return new Promise((resolve, reject) => {
-      this._setPhase('moving');
-      this._currentMove = { resolve, reject, cancelled:false, startTime:null, path:chosen.path, candidate:chosen, candidates:cands, progress:0, spring:makeSpringState(), target:{...target} };
-      this.target = {...target};
-      this._startLoop();
+  setParams(p){this.params={...this.params,...p}}
+  setSpring(cfg){this.spring=cfg;this.duration=computeCloseEnoughTime(cfg)}
+  moveTo(target){
+    if(this._move){this._move.cancelled=true;this._move.reject?.(new Error('superseded'));this._move=null}
+    const start={...this.position};
+    const cands=makeCandidates({start,end:target,bounds:this.bounds,startForward:this.heading,endForward:{x:1,y:0},params:this.params});
+    const chosen=chooseCandidate(cands);
+    if(!chosen){this.position={...target};return Promise.resolve()}
+    return new Promise((resolve,reject)=>{
+      this.phase='moving';
+      this._move={resolve,reject,cancelled:false,startTime:null,path:chosen.path,candidate:chosen,candidates:cands,progress:0,spring:makeSpringState(),target:{...target}};
+      this.target={...target};this._startLoop();
     });
   }
-  click({ count=1, holdMs=110, gapMs=50 }={}) {
-    return new Promise(resolve => {
-      this._setPhase('clicking');
-      let pulse=0;
-      const startNext = () => {
-        if (pulse>=count) { this.clickProgress=0; this._setPhase('idle'); resolve(); return; }
-        const st = performance.now();
-        const tick = () => {
-          const t = Math.min((performance.now()-st)/holdMs, 1);
-          this.clickProgress = Math.sin(t*Math.PI);
-          this._emitFrame(performance.now()/1000);
-          if (t<1) requestAnimationFrame(tick);
-          else { this.clickProgress=0; pulse++; pulse<count ? setTimeout(startNext,gapMs) : startNext(); }
-        };
-        requestAnimationFrame(tick);
-      };
-      startNext();
+  click({count=1,holdMs=110,gapMs=50}={}){
+    return new Promise(resolve=>{
+      this.phase='clicking';let pulse=0;
+      const next=()=>{
+        if(pulse>=count){this.clickProgress=0;this.phase='idle';resolve();return}
+        const st=performance.now();
+        const tick=()=>{
+          const t=Math.min((performance.now()-st)/holdMs,1);
+          this.clickProgress=Math.sin(t*Math.PI);
+          this._emit(performance.now()/1000);
+          if(t<1)requestAnimationFrame(tick);
+          else{this.clickProgress=0;pulse++;pulse<count?setTimeout(next,gapMs):next()}
+        };requestAnimationFrame(tick);
+      };next();
     });
   }
-  stop() { if(this._currentMove){this._currentMove.reject?.(new Error('stopped'));this._currentMove=null;} this._setPhase('idle'); }
-  destroy() { this.stop(); if(this._rafId!=null){cancelAnimationFrame(this._rafId);this._rafId=null;} }
-  _setPhase(p) { if(this.phase!==p){this.phase=p;this.onStateChange(p);} }
-  _startLoop() {
-    if (this._rafId!=null) return;
-    const tick = (ms) => { this._rafId=null; this._step(ms/1000); this._rafId=requestAnimationFrame(tick); };
-    this._rafId = requestAnimationFrame(tick);
+  stop(){if(this._move){this._move.reject?.(new Error('stopped'));this._move=null}this.phase='idle'}
+  destroy(){this.stop();if(this._rafId!=null){cancelAnimationFrame(this._rafId);this._rafId=null}}
+  _startLoop(){
+    if(this._rafId!=null)return;
+    const tick=ms=>{this._rafId=null;this._step(ms/1000);this._rafId=requestAnimationFrame(tick)};
+    this._rafId=requestAnimationFrame(tick);
   }
-  _step(now) {
-    if (this._currentMove) {
-      const m = this._currentMove;
-      if (m.startTime==null) m.startTime=now;
-      const elapsed = now-m.startTime;
-      const norm = clamp(elapsed/this.duration, 0, 1);
-      const tgt = norm * this.duration;
-      const [progress, springState] = advanceTo(m.progress, 1, m.spring, tgt, this.spring);
-      m.progress = progress; m.spring = springState;
-      const sample = samplePath(m.path, clamp(progress,0,1));
-      this.position = sample.point;
-      this.heading = sample.tangent;
-      this._emitFrame(now);
-      if (norm>=1 || isCloseEnough(progress,1,this.spring)) {
-        this.position = {...m.target};
-        const res = m.resolve; this._currentMove=null; this._setPhase('idle'); this._emitFrame(now); res?.();
+  _step(now){
+    if(this._move){
+      const m=this._move;
+      if(m.startTime==null)m.startTime=now;
+      const elapsed=now-m.startTime;
+      const norm=clamp(elapsed/this.duration,0,1);
+      const springTime=norm*this.duration;
+      const[progress,ss]=advanceTo(m.progress,1,m.spring,springTime,this.spring);
+      m.progress=progress;m.spring=ss;
+      const sample=samplePath(m.path,clamp(progress,0,1));
+      this.position=sample.point;this.heading=sample.tangent;
+      this._emit(now);
+      if(norm>=1||isCloseEnough(progress,1,this.spring)){
+        this.position={...m.target};
+        const res=m.resolve;this._move=null;this.phase='idle';
+        this._emit(now);res?.();
       }
-    } else if (this.phase==='idle' && this.idleEnabled) {
-      this.idlePhase += 0.05;
-      this._emitFrame(now, { idleAngleOffset: Math.sin(this.idlePhase*0.8)*0.09 });
+    } else if(this.phase==='idle'&&this.idleEnabled){
+      this.idlePhase+=(1/60)*3;
+      const iao=Math.sin(this.idlePhase*0.8)*WOBBLE_AMP;
+      this._emit(now,{idleAngleOffset:iao});
     }
   }
-  _emitFrame(now, {idleAngleOffset=0}={}) {
-    const vis = this.dynamics.advance(this.position, now, {idleAngleOffset});
-    this.onUpdate({ phase:this.phase, sample:this.position, tip:vis.tip, angle:vis.angle, heading:this.heading, velocity:vis.velocity, clickProgress:this.clickProgress, candidate:this._currentMove?.candidate??null, candidates:this._currentMove?.candidates??null });
+  _emit(now,{idleAngleOffset=0}={}){
+    const vis=this.dynamics.advance(this.position,now,{idleAngleOffset});
+    this.onUpdate({phase:this.phase,sample:this.position,tip:vis.tip,angle:vis.angle,heading:this.heading,velocity:vis.velocity,bodyOffset:vis.bodyOffset,fogOffset:vis.fogOffset,fogOpacity:vis.fogOpacity,fogScale:vis.fogScale,clickProgress:this.clickProgress,candidate:this._move?.candidate??null,candidates:this._move?.candidates??null});
   }
 }
 
 // ============================================================
-// DOM Renderer (inline)
+// Renderer
 // ============================================================
-const GLYPH_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+const GLYPH_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
   <defs><radialGradient id="cm-fog" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="rgba(255,255,255,0.85)"/><stop offset="55%" stop-color="rgba(255,255,255,0.18)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/></radialGradient>
   <linearGradient id="cm-body" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#d8dcec"/></linearGradient></defs>
-  <circle cx="16" cy="16" r="15" fill="url(#cm-fog)"/><path d="M9 7 L23 15 L15 17 L13 25 Z" fill="url(#cm-body)" stroke="rgba(20,24,40,0.55)" stroke-width="0.9" stroke-linejoin="round"/></svg>`;
+  <circle cx="16" cy="16" r="15" fill="url(#cm-fog)"/>
+  <path d="M9 7 L23 15 L15 17 L13 25 Z" fill="url(#cm-body)" stroke="rgba(20,24,40,0.55)" stroke-width="0.9" stroke-linejoin="round"/></svg>`;
 
 class DomCursorRenderer {
-  constructor({ container, showTrail=false, showCandidates=false }) {
-    this.container = container;
-    this.showTrail = showTrail;
-    this.showCandidates = showCandidates;
-    this.root = document.createElement('div');
-    Object.assign(this.root.style, { position:'absolute', inset:'0', pointerEvents:'none', zIndex:'9999', overflow:'visible' });
-    this.svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-    Object.assign(this.svg.style, { position:'absolute', inset:'0', width:'100%', height:'100%', pointerEvents:'none', overflow:'visible' });
+  constructor({container,showTrail=false,showCandidates=false}){
+    this.container=container;this.showTrail=showTrail;this.showCandidates=showCandidates;
+    this.root=document.createElement('div');
+    Object.assign(this.root.style,{position:'absolute',inset:'0',pointerEvents:'none',zIndex:'9999',overflow:'visible'});
+    this.svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    Object.assign(this.svg.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',overflow:'visible'});
     this.root.appendChild(this.svg);
-    this.glyph = document.createElement('div');
-    Object.assign(this.glyph.style, { position:'absolute', width:'32px', height:'32px', transformOrigin:'25% 25%', transform:'translate(-25%,-25%)', filter:'drop-shadow(0 4px 10px rgba(0,0,0,0.18))', willChange:'transform' });
-    this.glyph.innerHTML = GLYPH_SVG;
+    this.glyph=document.createElement('div');
+    Object.assign(this.glyph.style,{position:'absolute',width:'32px',height:'32px',transformOrigin:'25% 25%',filter:'drop-shadow(0 4px 10px rgba(0,0,0,0.18))',willChange:'transform'});
+    this.glyph.innerHTML=GLYPH_SVG;
     this.root.appendChild(this.glyph);
     container.appendChild(this.root);
-    this._trail = [];
+    this._trail=[];
   }
-  onUpdate = (state) => {
-    const {tip,angle,clickProgress,candidate,candidates} = state;
-    if (!tip) return;
-    const sc = 1 - clickProgress*0.18;
-    this.glyph.style.transform = `translate(${tip.x}px,${tip.y}px) translate(-25%,-25%) rotate(${angle}rad) scale(${sc})`;
-    if (this.showTrail) { this._trail.push({x:tip.x,y:tip.y}); if(this._trail.length>300) this._trail.shift(); }
-    if (this.showCandidates||this.showTrail) this._redraw({candidate,candidates});
-    else if (this.svg.firstChild) while(this.svg.firstChild) this.svg.removeChild(this.svg.firstChild);
+  onUpdate=(state)=>{
+    const{tip,angle,clickProgress,candidate,candidates,bodyOffset}=state;
+    if(!tip)return;
+    const sc=1-clickProgress*0.18;
+    const bx=bodyOffset?.x??0,by=bodyOffset?.y??0;
+    // The SVG arrow tip is at upper-left (~-135°). angle=0 means resting (upper-left).
+    // We apply the rotation directly.
+    this.glyph.style.transform=`translate(${tip.x+bx}px,${tip.y+by}px) translate(-25%,-25%) rotate(${angle}rad) scale(${sc})`;
+    if(this.showTrail){this._trail.push({x:tip.x,y:tip.y});if(this._trail.length>300)this._trail.shift()}
+    if(this.showCandidates||this.showTrail)this._redraw(candidate,candidates);
+    else while(this.svg.firstChild)this.svg.removeChild(this.svg.firstChild);
   };
-  _redraw({candidate,candidates}) {
-    while(this.svg.firstChild) this.svg.removeChild(this.svg.firstChild);
-    if (this.showCandidates && candidates) {
-      for (const c of candidates) {
-        const el = document.createElementNS('http://www.w3.org/2000/svg','path');
-        el.setAttribute('d', this._pathD(c.path));
-        el.setAttribute('fill','none');
-        el.setAttribute('stroke', c===candidate?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.15)');
-        el.setAttribute('stroke-width', c===candidate?'2':'0.8');
-        if (c!==candidate) el.setAttribute('stroke-dasharray','4 4');
+  _redraw(candidate,candidates){
+    while(this.svg.firstChild)this.svg.removeChild(this.svg.firstChild);
+    if(this.showCandidates&&candidates){
+      for(const c of candidates){
+        const el=document.createElementNS('http://www.w3.org/2000/svg','path');
+        el.setAttribute('d',this._pathD(c.path));el.setAttribute('fill','none');
+        el.setAttribute('stroke',c===candidate?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.12)');
+        el.setAttribute('stroke-width',c===candidate?'2':'0.8');
+        if(c!==candidate)el.setAttribute('stroke-dasharray','4 4');
         this.svg.appendChild(el);
       }
     }
-    if (this.showTrail && this._trail.length>1) {
-      const d = this._trail.map((p,i)=>`${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-      const el = document.createElementNS('http://www.w3.org/2000/svg','path');
-      el.setAttribute('d',d); el.setAttribute('fill','none');
-      el.setAttribute('stroke','rgba(140,200,255,0.7)'); el.setAttribute('stroke-width','1.5');
+    if(this.showTrail&&this._trail.length>1){
+      const d=this._trail.map((p,i)=>`${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+      const el=document.createElementNS('http://www.w3.org/2000/svg','path');
+      el.setAttribute('d',d);el.setAttribute('fill','none');
+      el.setAttribute('stroke','rgba(140,200,255,0.7)');el.setAttribute('stroke-width','1.5');
       this.svg.appendChild(el);
     }
   }
-  _pathD(path) {
-    if (!path.segments?.length) return '';
-    let d = `M${path.start.x},${path.start.y}`;
-    for (const seg of path.segments) d += ` C${seg.control1.x},${seg.control1.y} ${seg.control2.x},${seg.control2.y} ${seg.end.x},${seg.end.y}`;
+  _pathD(path){
+    if(!path.segments?.length)return'';
+    let d=`M${path.start.x},${path.start.y}`;
+    for(const seg of path.segments)d+=` C${seg.control1.x},${seg.control1.y} ${seg.control2.x},${seg.control2.y} ${seg.end.x},${seg.end.y}`;
     return d;
   }
 }
@@ -511,119 +468,74 @@ class DomCursorRenderer {
 // ============================================================
 // DEMO LOGIC
 // ============================================================
-const stage = document.getElementById('stage');
-const renderer = new DomCursorRenderer({ container: stage, showTrail: true, showCandidates: true });
-const engine = new CursorMotionEngine({
-  initial: { x: window.innerWidth/2, y: window.innerHeight/2 },
-  bounds: { minX: 0, minY: 0, maxX: window.innerWidth, maxY: window.innerHeight },
-  onUpdate: (state) => {
+const stage=document.getElementById('stage');
+const renderer=new DomCursorRenderer({container:stage,showTrail:true,showCandidates:true});
+const engine=new CursorMotionEngine({
+  initial:{x:window.innerWidth/2,y:window.innerHeight/2},
+  bounds:{minX:0,minY:0,maxX:window.innerWidth,maxY:window.innerHeight},
+  onUpdate:(state)=>{
     renderer.onUpdate(state);
-    document.getElementById('i-phase').textContent = state.phase;
-    if (state.tip) document.getElementById('i-pos').textContent = `${state.tip.x.toFixed(0)}, ${state.tip.y.toFixed(0)}`;
+    document.getElementById('i-phase').textContent=state.phase;
+    if(state.tip)document.getElementById('i-pos').textContent=`${state.tip.x.toFixed(0)}, ${state.tip.y.toFixed(0)}`;
+    if(state.angle!=null)document.getElementById('i-angle').textContent=`${(state.angle*180/Math.PI).toFixed(1)}°`;
   },
-  onStateChange: () => {},
-  idle: false,
+  idle:false,
 });
 
 // Targets
-const targetData = [
-  { x: 0.15, y: 0.25, label: 'A' },
-  { x: 0.75, y: 0.18, label: 'B' },
-  { x: 0.85, y: 0.65, label: 'C' },
-  { x: 0.35, y: 0.75, label: 'D' },
-  { x: 0.55, y: 0.45, label: 'E' },
-];
-const targets = targetData.map(t => {
-  const el = document.createElement('div');
-  el.className = 'target';
-  el.textContent = t.label;
-  el.style.left = `${t.x * 100}%`;
-  el.style.top = `${t.y * 100}%`;
-  el.style.transform = 'translate(-50%,-50%)';
-  stage.appendChild(el);
-  return { el, xPct: t.x, yPct: t.y, label: t.label };
+const targetData=[{x:0.15,y:0.25,label:'A'},{x:0.75,y:0.18,label:'B'},{x:0.85,y:0.65,label:'C'},{x:0.35,y:0.75,label:'D'},{x:0.55,y:0.45,label:'E'}];
+const targets=targetData.map(t=>{
+  const el=document.createElement('div');el.className='target';el.textContent=t.label;
+  el.style.left=`${t.x*100}%`;el.style.top=`${t.y*100}%`;el.style.transform='translate(-50%,-50%)';
+  stage.appendChild(el);return{el,xPct:t.x,yPct:t.y};
 });
+function getTargetPos(t){return{x:t.xPct*window.innerWidth,y:t.yPct*window.innerHeight}}
 
-function getTargetPos(t) {
-  return { x: t.xPct * window.innerWidth, y: t.yPct * window.innerHeight };
-}
-
-targets.forEach(t => {
-  t.el.addEventListener('click', async (e) => {
+targets.forEach(t=>{
+  t.el.addEventListener('click',async e=>{
     e.stopPropagation();
-    const pos = getTargetPos(t);
-    await engine.moveTo(pos);
-    t.el.classList.add('hit');
-    await engine.click();
-    setTimeout(() => t.el.classList.remove('hit'), 400);
+    await engine.moveTo(getTargetPos(t));
+    t.el.classList.add('hit');await engine.click();
+    setTimeout(()=>t.el.classList.remove('hit'),400);
   });
 });
-
-// Click anywhere on stage
-stage.addEventListener('click', async (e) => {
-  if (e.target !== stage) return;
-  await engine.moveTo({ x: e.clientX, y: e.clientY });
+stage.addEventListener('click',async e=>{
+  if(e.target!==stage)return;
+  await engine.moveTo({x:e.clientX,y:e.clientY});
   await engine.click();
 });
 
 // Sliders
-function readParams() {
-  return {
-    startHandle: parseInt(document.getElementById('s-start').value) / 100,
-    endHandle: parseInt(document.getElementById('s-end').value) / 100,
-    arcSize: parseInt(document.getElementById('s-arc').value) / 100,
-    arcFlow: parseInt(document.getElementById('s-flow').value) / 100,
-  };
+function readParams(){
+  return{startHandle:parseInt(document.getElementById('s-start').value)/100,endHandle:parseInt(document.getElementById('s-end').value)/100,arcSize:parseInt(document.getElementById('s-arc').value)/100,arcFlow:parseInt(document.getElementById('s-flow').value)/100};
 }
-function readSpring() {
-  const s = parseInt(document.getElementById('s-spring').value) / 100;
-  const response = 0.6 + (1 - s) * 1.6;
-  const dampingFraction = 0.7 + 0.4 * (1 - Math.abs(s - 0.5) * 2);
-  return buildSpringConfig({ response, dampingFraction });
+function readSpring(){
+  const s=parseInt(document.getElementById('s-spring').value)/100;
+  const response=0.6+(1-s)*1.6,dampingFraction=0.7+0.4*(1-Math.abs(s-0.5)*2);
+  return buildSpringConfig({response,dampingFraction});
 }
-['s-start','s-end','s-arc','s-flow','s-spring'].forEach(id => {
-  const el = document.getElementById(id);
-  el.addEventListener('input', () => {
-    const val = (parseInt(el.value)/100).toFixed(2);
-    document.getElementById('v-' + id.split('-')[1]).textContent = val;
+['s-start','s-end','s-arc','s-flow','s-spring'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',function(){
+    document.getElementById('v-'+id.split('-')[1]).textContent=(parseInt(this.value)/100).toFixed(2);
     engine.setParams(readParams());
-    if (id === 's-spring') engine.setSpring(readSpring());
+    if(id==='s-spring')engine.setSpring(readSpring());
   });
 });
-
 // Toggles
-document.getElementById('t-trail').addEventListener('click', function() {
-  this.classList.toggle('on');
-  renderer.showTrail = this.classList.contains('on');
-  if (!renderer.showTrail) renderer._trail = [];
-});
-document.getElementById('t-cands').addEventListener('click', function() {
-  this.classList.toggle('on');
-  renderer.showCandidates = this.classList.contains('on');
-});
-document.getElementById('t-idle').addEventListener('click', function() {
-  this.classList.toggle('on');
-  engine.idleEnabled = this.classList.contains('on');
-});
-
+document.getElementById('t-trail').addEventListener('click',function(){this.classList.toggle('on');renderer.showTrail=this.classList.contains('on');if(!renderer.showTrail)renderer._trail=[]});
+document.getElementById('t-cands').addEventListener('click',function(){this.classList.toggle('on');renderer.showCandidates=this.classList.contains('on')});
+document.getElementById('t-idle').addEventListener('click',function(){this.classList.toggle('on');engine.idleEnabled=this.classList.contains('on')});
 // Run Sequence
-document.getElementById('run-btn').addEventListener('click', async function() {
-  this.disabled = true;
-  for (const t of targets) {
-    const pos = getTargetPos(t);
-    await engine.moveTo(pos);
-    t.el.classList.add('hit');
-    await engine.click();
-    await new Promise(r => setTimeout(r, 200));
-    t.el.classList.remove('hit');
+document.getElementById('run-btn').addEventListener('click',async function(){
+  this.disabled=true;
+  for(const t of targets){
+    await engine.moveTo(getTargetPos(t));
+    t.el.classList.add('hit');await engine.click();
+    await new Promise(r=>setTimeout(r,200));t.el.classList.remove('hit');
   }
-  this.disabled = false;
+  this.disabled=false;
 });
-
-// Resize handler
-window.addEventListener('resize', () => {
-  engine.bounds = { minX: 0, minY: 0, maxX: window.innerWidth, maxY: window.innerHeight };
-});
+window.addEventListener('resize',()=>{engine.bounds={minX:0,minY:0,maxX:window.innerWidth,maxY:window.innerHeight}});
 </script>
 </body>
 </html>

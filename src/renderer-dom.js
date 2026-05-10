@@ -83,15 +83,27 @@ export class DomCursorRenderer {
 
   // Engine-compatible onUpdate callback.
   onUpdate = (state) => {
-    const { tip, angle, clickProgress, candidate, candidates, phase } = state;
+    const { tip, angle, clickProgress, candidate, candidates, bodyOffset, fogOffset, fogOpacity, fogScale } = state;
     if (!tip) return;
 
-    // Glyph transform — the artwork's tip sits near (25%, 25%), so we
-    // translate the centre to (-25%, -25%) and then position by tip.
-    const scale = 1 - clickProgress * 0.18;
+    // The cursor SVG artwork already has its tip pointing upper-left (~-135°).
+    // The `angle` from visual dynamics is 0 at rest (upper-left),
+    // so we just apply it directly as the rotation.
+    const sc = 1 - clickProgress * 0.18;
+    const bx = bodyOffset?.x ?? 0;
+    const by = bodyOffset?.y ?? 0;
     this.glyph.style.transform =
-      `translate(${tip.x}px, ${tip.y}px) translate(-25%, -25%) ` +
-      `rotate(${angle}rad) scale(${scale})`;
+      `translate(${tip.x + bx}px, ${tip.y + by}px) translate(-25%, -25%) ` +
+      `rotate(${angle}rad) scale(${sc})`;
+
+    // Update fog circle opacity/scale if the glyph has one
+    const fogEl = this.glyph.querySelector('circle');
+    if (fogEl && fogOpacity != null) {
+      fogEl.style.opacity = String(Math.min(fogOpacity / 0.34, 1));
+      const fs = fogScale ?? 1;
+      fogEl.setAttribute('transform', `scale(${fs})`);
+      fogEl.setAttribute('transform-origin', '16 16');
+    }
 
     if (this.showTrail) {
       this._trailPoints.push({ x: tip.x, y: tip.y });
@@ -99,7 +111,7 @@ export class DomCursorRenderer {
     }
 
     if (this.showCandidates || this.showTrail) {
-      this._redrawDebug({ candidate, candidates, phase });
+      this._redrawDebug({ candidate, candidates });
     } else if (this.svg.firstChild) {
       this._clearSvg();
     }
