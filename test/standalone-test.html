@@ -422,10 +422,11 @@ class CursorMotionEngine {
 
 // ============================================================
 // Renderer — matching reference cursor appearance
-// Dark charcoal fill (0.38,0.36,0.35) + white stroke (0.90)
+// Dark charcoal fill (closer to black visually) + white stroke
+// Pointer path from SynthesizedCursorGlyphView contourRows data
 // Multi-stop radial fog, motion compression, lateral sway
 // ============================================================
-const POINTER_PATH='M14.5 6.5 L10.5 29.5 L17 21 L29 19 Z';
+const POINTER_PATH='M13.3 7.0 L11.9 8.7 L11.2 10.3 L11.9 12.0 L11.9 13.6 L12.6 15.3 L12.6 16.9 L12.6 18.6 L13.3 20.2 L13.3 21.9 L14.0 23.6 L14.0 25.2 L14.8 26.9 L14.8 28.5 L15.5 30.2 L16.2 31.0 L19.0 31.0 L19.8 29.3 L21.2 27.7 L21.9 26.0 L22.6 24.4 L24.8 22.7 L28.3 21.1 L30.5 19.4 L30.5 17.8 L30.5 16.1 L29.8 14.4 L26.9 12.8 L23.3 11.1 L20.5 9.5 L17.6 7.8 L15.5 7.0 Z';
 const GLYPH_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="overflow:visible">
   <defs><radialGradient id="cm-fog">
     <stop offset="0%" stop-color="rgba(97,92,89,0.40)"/>
@@ -435,9 +436,9 @@ const GLYPH_SVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" wid
   </radialGradient></defs>
   <circle class="cm-fog" cx="24" cy="24" r="33" fill="url(#cm-fog)"/>
   <path class="cm-ptr" d="${POINTER_PATH}"
-        fill="rgba(97,92,89,0.98)"
+        fill="rgba(56,53,51,0.98)"
         stroke="rgba(230,230,230,0.92)"
-        stroke-width="1.55"
+        stroke-width="1.6"
         stroke-linejoin="round"
         stroke-linecap="round"/>
 </svg>`;

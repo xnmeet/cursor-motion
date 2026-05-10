@@ -2,14 +2,15 @@
 // soft cursor (tip + glow + click pulse) on top of any web page or
 // container. No external dependencies.
 //
-// The glyph matches the official reference: dark charcoal fill with white
-// stroke, neutral orientation pointing upper-left (-135°). The fog/glow is
-// rendered as a separate element to allow independent offset/scale/opacity.
+// The glyph matches the official runtime overlay: dark charcoal (near-black)
+// fill with white stroke, neutral orientation pointing upper-left (-135°).
+// The pointer path is derived from the SynthesizedCursorGlyphView contourRows.
+// The fog/glow is rendered as a separate element for independent offset/scale.
 
-// Pointer shape derived from the reference SynthesizedCursorGlyphView contour.
-// Coordinate system: 48×48 viewBox, pointer centered, tip at upper-left.
-// The shape path is scaled from the original 48×48 pixel contour data.
-const POINTER_PATH = 'M14.5 6.5 L10.5 29.5 L17 21 L29 19 Z';
+// Pointer shape derived from the SynthesizedCursorGlyphView contourRows data.
+// Coordinate system: 48×48 viewBox, tip at (14.4, 7.0) = (30%, 14.6%).
+// The path is mapped from the original 48×48 pixel grid source coordinates.
+const POINTER_PATH = 'M13.3 7.0 L11.9 8.7 L11.2 10.3 L11.9 12.0 L11.9 13.6 L12.6 15.3 L12.6 16.9 L12.6 18.6 L13.3 20.2 L13.3 21.9 L14.0 23.6 L14.0 25.2 L14.8 26.9 L14.8 28.5 L15.5 30.2 L16.2 31.0 L19.0 31.0 L19.8 29.3 L21.2 27.7 L21.9 26.0 L22.6 24.4 L24.8 22.7 L28.3 21.1 L30.5 19.4 L30.5 17.8 L30.5 16.1 L29.8 14.4 L26.9 12.8 L23.3 11.1 L20.5 9.5 L17.6 7.8 L15.5 7.0 Z';
 
 const DEFAULT_GLYPH_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="overflow:visible">
@@ -23,9 +24,9 @@ const DEFAULT_GLYPH_SVG = `
   </defs>
   <circle class="cm-fog-circle" cx="24" cy="24" r="33" fill="url(#cm-fog)"/>
   <path class="cm-pointer" d="${POINTER_PATH}"
-        fill="rgba(97,92,89,0.98)"
+        fill="rgba(56,53,51,0.98)"
         stroke="rgba(230,230,230,0.92)"
-        stroke-width="1.55"
+        stroke-width="1.6"
         stroke-linejoin="round"
         stroke-linecap="round"/>
 </svg>
