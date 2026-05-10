@@ -369,7 +369,7 @@ class CursorMotionEngine {
   destroy(){this.stop();if(this._rafId!=null){cancelAnimationFrame(this._rafId);this._rafId=null}}
   _startLoop(){
     if(this._rafId!=null)return;
-    const tick=ms=>{this._rafId=null;this._step(ms/1000);this._rafId=requestAnimationFrame(tick)};
+    const tick=ms=>{this._rafId=null;this._step(ms/1000);if(this._rafId==null)this._rafId=requestAnimationFrame(tick)};
     this._rafId=requestAnimationFrame(tick);
   }
   _step(now){
@@ -387,12 +387,19 @@ class CursorMotionEngine {
       if(norm>=1||isCloseEnough(progress,1,this.spring)){
         this.position={...m.target};
         const res=m.resolve;this._move=null;this.phase='idle';
+        this._settleStart=now;
         this._emit(now);res?.();
       }
-    } else if(this.phase==='idle'&&this.idleEnabled){
+    } else if(this.phase==='idle'){
       this.idlePhase+=(1/60)*3;
-      const iao=Math.sin(this.idlePhase*0.8)*WOBBLE_AMP;
+      const iao=this.idleEnabled?Math.sin(this.idlePhase*0.8)*WOBBLE_AMP:0;
       this._emit(now,{idleAngleOffset:iao});
+      // Stop loop once visual dynamics fully settled (no idle wiggle mode)
+      const spd=Math.hypot(this.dynamics.tvx,this.dynamics.tvy);
+      const settleT=now-(this._settleStart??now);
+      if(!this.idleEnabled&&spd<2&&Math.abs(this.dynamics.angle)<0.02&&settleT>0.3){
+        cancelAnimationFrame(this._rafId);this._rafId=null;
+      }
     }
   }
   _emit(now,{idleAngleOffset=0}={}){

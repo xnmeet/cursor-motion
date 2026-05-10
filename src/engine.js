@@ -348,7 +348,8 @@ export class CursorMotionEngine {
     const tick = (nowMs) => {
       this._rafId = null;
       this._step(nowMs / 1000);
-      if (this._currentMove || this.phase !== 'idle' || this.idleEnabled) {
+      // Always re-schedule; the idle branch handles stopping once settled.
+      if (this._rafId == null) {
         this._rafId = requestAnimationFrame(tick);
       }
     };
@@ -373,20 +374,45 @@ export class CursorMotionEngine {
       this._emitFrame(now);
 
       if (normalized >= 1 || isCloseEnough(progress, 1, this.spring)) {
-        // Snap to exact target so caller sees a clean end position.
+        // Snap position to exact target so caller sees a clean end.
+        // But do NOT reset visual dynamics — let tip velocity decay naturally
+        // so the arrow heading smoothly returns to resting pose.
         this.position = { ...move.target };
         const resolve = move.resolve;
         this._currentMove = null;
         this._setPhase('idle');
-        if (this.idleEnabled) this._startIdle();
+        // Always continue the loop after finishing a move so the visual
+        // dynamics can settle (tip velocity → 0, angle → resting).
+        // This matches the reference: step() is always called by display-link.
+        this._settleStartTime = now;
+        this._ensureLoop();
         this._emitFrame(now);
         resolve?.();
       }
-    } else if (this.phase === 'idle' && this.idleEnabled) {
+    } else if (this.phase === 'idle') {
+      // Continue driving visual dynamics while settling.
       // Reference: idlePhase += clampedDelta * 3; wobble = sin(phase * 0.8) * π/12
-      this.idlePhase += (1/60) * 3; // approximate per-frame at 60fps
-      const idleAngleOffset = Math.sin(this.idlePhase * 0.8) * WOBBLE_AMPLITUDE;
+      this.idlePhase += (1 / 60) * 3;
+      const idleAngleOffset = this.idleEnabled
+        ? Math.sin(this.idlePhase * 0.8) * WOBBLE_AMPLITUDE
+        : 0;
       this._emitFrame(now, { idleAngleOffset });
+
+      // Stop the loop once visual dynamics have fully settled
+      // (tip velocity below threshold and angle near zero)
+      const tipSpeed = Math.hypot(
+        this.dynamics.tipVelocity.x,
+        this.dynamics.tipVelocity.y
+      );
+      const settleElapsed = now - (this._settleStartTime ?? now);
+      const isSettled = tipSpeed < 2 && Math.abs(this.dynamics.angle) < 0.02;
+      if (!this.idleEnabled && isSettled && settleElapsed > 0.3) {
+        // Fully settled, stop the loop to save CPU
+        if (this._rafId != null) {
+          cancelAnimationFrame(this._rafId);
+          this._rafId = null;
+        }
+      }
     }
   }
 
