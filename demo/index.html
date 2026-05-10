@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cursor-motion-js · demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg-0: #0a0d18;
+        --bg-1: #141a2c;
+        --fg: #e8ecff;
+        --muted: #9aa3c7;
+        --accent: #7ea7ff;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg-0); color: var(--fg); }
+      body { display: grid; grid-template-rows: auto 1fr auto; }
+      header { padding: 16px 22px; border-bottom: 1px solid #1f2540; display: flex; align-items: baseline; gap: 16px; }
+      header h1 { margin: 0; font-size: 16px; letter-spacing: 0.4px; }
+      header .sub { color: var(--muted); font-size: 13px; }
+      main {
+        position: relative;
+        margin: 18px;
+        background:
+          radial-gradient(1200px 600px at 20% 0%, rgba(126, 167, 255, 0.10), transparent 60%),
+          radial-gradient(900px 500px at 80% 100%, rgba(255, 200, 140, 0.08), transparent 60%),
+          var(--bg-1);
+        border: 1px solid #232a47;
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      #stage {
+        position: absolute;
+        inset: 0;
+        cursor: crosshair;
+      }
+      .target {
+        position: absolute;
+        width: 56px; height: 56px;
+        border-radius: 14px;
+        background: rgba(126, 167, 255, 0.15);
+        border: 1px solid rgba(126, 167, 255, 0.55);
+        color: var(--fg);
+        display: grid; place-items: center;
+        font-size: 13px;
+        cursor: pointer;
+        user-select: none;
+        transition: transform 120ms ease, background 120ms ease;
+      }
+      .target:hover { background: rgba(126, 167, 255, 0.28); transform: translate(-50%, -50%) scale(1.04); }
+      .target.hit {
+        background: rgba(180, 255, 200, 0.25);
+        border-color: rgba(180, 255, 200, 0.7);
+      }
+      .panel {
+        position: absolute;
+        background: rgba(20, 25, 44, 0.86);
+        backdrop-filter: blur(8px);
+        border: 1px solid #2a3155;
+        border-radius: 12px;
+        padding: 14px 16px;
+        font-size: 12px;
+        color: var(--fg);
+        z-index: 10;
+        min-width: 240px;
+      }
+      .panel h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.6px; color: var(--muted); text-transform: uppercase; }
+      .row { display: grid; grid-template-columns: 110px 1fr 48px; align-items: center; gap: 8px; margin: 6px 0; }
+      .row label { color: var(--muted); font-size: 11px; letter-spacing: 0.4px; text-transform: uppercase; }
+      .row .val { text-align: right; color: var(--fg); font-variant-numeric: tabular-nums; }
+      input[type=range] { width: 100%; accent-color: var(--accent); }
+      .switches { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+      .switches label { display: flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; }
+      footer { padding: 10px 22px; border-top: 1px solid #1f2540; color: var(--muted); font-size: 12px; display: flex; gap: 16px; }
+      kbd { background: #1d2342; border: 1px solid #2c345b; border-bottom-width: 2px; padding: 1px 6px; border-radius: 4px; font-size: 11px; }
+      .panel.left { left: 18px; top: 18px; }
+      .panel.right { right: 18px; top: 18px; }
+      button.ghost {
+        background: transparent; color: var(--fg);
+        border: 1px solid #2a3155; padding: 6px 10px; border-radius: 8px;
+        cursor: pointer; font-size: 12px;
+      }
+      button.ghost:hover { background: #1d2342; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>cursor-motion-js</h1>
+      <span class="sub">click anywhere on the stage to move the cursor &middot; click a target to test sequences</span>
+    </header>
+
+    <main>
+      <div id="stage"></div>
+
+      <section class="panel left">
+        <h2>Motion Parameters</h2>
+        <div class="row"><label>Start handle</label><input id="startHandle" type="range" min="0" max="1" step="0.01" value="0.29"/><span class="val" id="startHandleV">0.29</span></div>
+        <div class="row"><label>End handle</label><input id="endHandle" type="range" min="0" max="1" step="0.01" value="0.08"/><span class="val" id="endHandleV">0.08</span></div>
+        <div class="row"><label>Arc size</label><input id="arcSize" type="range" min="0" max="1" step="0.01" value="0.06"/><span class="val" id="arcSizeV">0.06</span></div>
+        <div class="row"><label>Arc flow</label><input id="arcFlow" type="range" min="0" max="1" step="0.01" value="0.64"/><span class="val" id="arcFlowV">0.64</span></div>
+        <div class="row"><label>Spring</label><input id="spring" type="range" min="0" max="1" step="0.01" value="0.5"/><span class="val" id="springV">0.50</span></div>
+        <div style="margin-top: 10px; display: flex; gap: 8px;">
+          <button class="ghost" id="resetParams">Reset</button>
+          <button class="ghost" id="runSeq">Run sequence</button>
+        </div>
+      </section>
+
+      <section class="panel right">
+        <h2>Debug</h2>
+        <div class="switches">
+          <label><input type="checkbox" id="trailToggle"/> Trail</label>
+          <label><input type="checkbox" id="candidatesToggle"/> Candidates</label>
+          <label><input type="checkbox" id="idleToggle" checked/> Idle wiggle</label>
+        </div>
+        <div style="margin-top: 10px; color: var(--muted); line-height: 1.5;">
+          <div>phase: <span id="phaseLabel">idle</span></div>
+          <div>pos: <span id="posLabel">0,0</span></div>
+          <div>candidate: <span id="candLabel">—</span></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Default spring: <kbd>response 1.4 / damping 0.9</kbd> · close-enough ≈ <span id="closeEnoughLabel">…</span>s</span>
+      <span style="margin-left:auto">port of <code>iFurySt/open-codex-computer-use</code> cursor motion model</span>
+    </footer>
+
+    <script type="module">
+      import {
+        CursorMotionEngine,
+        DomCursorRenderer,
+        buildSpringConfig,
+        DEFAULT_CLOSE_ENOUGH_TIME,
+      } from '../src/index.js';
+
+      const stage = document.getElementById('stage');
+
+      // Place a few clickable targets so the cursor has interesting moves.
+      const layout = [
+        { x: 0.18, y: 0.30, label: '1' },
+        { x: 0.72, y: 0.22, label: '2' },
+        { x: 0.86, y: 0.68, label: '3' },
+        { x: 0.34, y: 0.78, label: '4' },
+        { x: 0.55, y: 0.50, label: '5' },
+      ];
+      const targets = [];
+      function buildTargets() {
+        for (const t of targets) t.el.remove();
+        targets.length = 0;
+        const rect = stage.getBoundingClientRect();
+        for (const item of layout) {
+          const el = document.createElement('div');
+          el.className = 'target';
+          el.style.left = `${item.x * rect.width}px`;
+          el.style.top = `${item.y * rect.height}px`;
+          el.style.transform = 'translate(-50%, -50%)';
+          el.textContent = item.label;
+          stage.appendChild(el);
+          const point = { x: item.x * rect.width, y: item.y * rect.height };
+          targets.push({ el, ...point });
+          el.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            await engine.moveTo(point);
+            el.classList.add('hit');
+            setTimeout(() => el.classList.remove('hit'), 350);
+            await engine.click({ count: 1 });
+          });
+        }
+      }
+
+      const renderer = new DomCursorRenderer({ container: stage, showTrail: false, showCandidates: false });
+      const engine = new CursorMotionEngine({
+        initial: { x: 80, y: 80 },
+        onUpdate: (state) => {
+          renderer.onUpdate(state);
+          phaseLabel.textContent = state.phase;
+          posLabel.textContent = `${Math.round(state.tip.x)}, ${Math.round(state.tip.y)}`;
+          candLabel.textContent = state.candidate ? `${state.candidate.id} (score ${state.candidate.score.toFixed(1)})` : '—';
+        },
+      });
+
+      const phaseLabel = document.getElementById('phaseLabel');
+      const posLabel = document.getElementById('posLabel');
+      const candLabel = document.getElementById('candLabel');
+      const closeEnoughLabel = document.getElementById('closeEnoughLabel');
+      closeEnoughLabel.textContent = DEFAULT_CLOSE_ENOUGH_TIME.toFixed(3);
+
+      // Stage clicks → move cursor.
+      stage.addEventListener('click', async (ev) => {
+        if (ev.target !== stage && ev.target.id !== 'stage') return;
+        const rect = stage.getBoundingClientRect();
+        await engine.moveTo({ x: ev.clientX - rect.left, y: ev.clientY - rect.top });
+        await engine.click({ count: 1 });
+      });
+
+      // Bounds follow the stage size.
+      const updateBounds = () => {
+        const rect = stage.getBoundingClientRect();
+        engine.setBounds({ minX: 0, minY: 0, maxX: rect.width, maxY: rect.height });
+        buildTargets();
+      };
+      window.addEventListener('resize', updateBounds);
+      requestAnimationFrame(updateBounds);
+
+      // Sliders.
+      const ids = ['startHandle', 'endHandle', 'arcSize', 'arcFlow', 'spring'];
+      const wireSlider = (id, onChange) => {
+        const input = document.getElementById(id);
+        const valueEl = document.getElementById(id + 'V');
+        const update = () => {
+          valueEl.textContent = parseFloat(input.value).toFixed(2);
+          onChange(parseFloat(input.value));
+        };
+        input.addEventListener('input', update);
+        return update;
+      };
+      const updateParams = () => {
+        engine.setParams({
+          startHandle: parseFloat(document.getElementById('startHandle').value),
+          endHandle: parseFloat(document.getElementById('endHandle').value),
+          arcSize: parseFloat(document.getElementById('arcSize').value),
+          arcFlow: parseFloat(document.getElementById('arcFlow').value),
+        });
+      };
+      const updateSpring = () => {
+        const s = parseFloat(document.getElementById('spring').value);
+        // Map slider 0..1 around the official 1.4/0.9 with sensible bounds.
+        const response = 0.6 + (1 - s) * 1.6; // 0 → 2.2, 0.5 → 1.4, 1 → 0.6
+        const dampingFraction = 0.65 + (1 - Math.abs(s - 0.5) * 2) * 0.30; // peaks at 0.5
+        engine.setSpring(buildSpringConfig({ response, dampingFraction }));
+      };
+      ids.forEach((id) => wireSlider(id, () => { updateParams(); updateSpring(); }));
+
+      document.getElementById('resetParams').addEventListener('click', () => {
+        const defaults = { startHandle: 0.29, endHandle: 0.08, arcSize: 0.06, arcFlow: 0.64, spring: 0.5 };
+        for (const [id, v] of Object.entries(defaults)) {
+          const el = document.getElementById(id);
+          el.value = v;
+          el.dispatchEvent(new Event('input'));
+        }
+      });
+      document.getElementById('runSeq').addEventListener('click', async () => {
+        for (const t of targets) {
+          await engine.moveTo({ x: t.x, y: t.y });
+          await engine.click({ count: 1 });
+        }
+      });
+
+      document.getElementById('trailToggle').addEventListener('change', (e) => renderer.setShowTrail(e.target.checked));
+      document.getElementById('candidatesToggle').addEventListener('change', (e) => renderer.setShowCandidates(e.target.checked));
+      document.getElementById('idleToggle').addEventListener('change', (e) => {
+        engine.idleEnabled = e.target.checked;
+      });
+    </script>
+  </body>
+</html>

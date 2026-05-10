@@ -1,0 +1,31 @@
+{
+  "name": "cursor-motion-js",
+  "version": "0.1.0",
+  "description": "Natural, spring-based cursor motion for the web. Port of the Codex Computer Use cursor motion model (open-codex-computer-use).",
+  "type": "module",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./vec2": "./src/vec2.js",
+    "./path": "./src/path.js",
+    "./candidates": "./src/candidates.js",
+    "./spring": "./src/spring.js",
+    "./engine": "./src/engine.js"
+  },
+  "files": ["src", "README.md"],
+  "scripts": {
+    "demo": "python3 -m http.server 8765 --directory ."
+  },
+  "keywords": [
+    "cursor",
+    "motion",
+    "spring",
+    "bezier",
+    "animation",
+    "computer-use",
+    "codex"
+  ],
+  "license": "MIT",
+  "author": "kuai-ge"
+}
