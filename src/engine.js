@@ -44,6 +44,8 @@ const HEADING_VELOCITY_FLOOR = 14;
 const WOBBLE_AMPLITUDE = Math.PI / 12;
 const BODY_OFFSET_SCALE = 0.0012;
 const BODY_OFFSET_MAX = 2.4;
+const BODY_LATERAL_SCALE = 0.06;
+const BODY_LATERAL_MAX = 1.4;
 const FOG_OFFSET_SCALE = 0.0045;
 const FOG_OFFSET_MAX = 9;
 const FOG_OPACITY_BASE = 0.12;
@@ -142,26 +144,46 @@ class VisualDynamics {
     const clampedIdle = Math.max(-0.28, Math.min(0.28, idleAngleOffset));
     const rotation = normalizeAngle(this.angle + clampedIdle);
 
-    // Body offset: lag behind velocity direction
-    let bodyOffset = { x: 0, y: 0 };
-    let fogOffset = { x: 0, y: 0 };
-    let fogOpacity = FOG_OPACITY_BASE;
-    let fogScale = 1;
+    // Direction: velocity-based, or fallback to baseHeading + idle offset
+    let dirX, dirY;
     if (speed > 0.001) {
-      const dirX = this.tipVelocity.x / speed;
-      const dirY = this.tipVelocity.y / speed;
-      const bodyMag = -Math.min(speed * BODY_OFFSET_SCALE, BODY_OFFSET_MAX);
-      bodyOffset = { x: dirX * bodyMag, y: dirY * bodyMag };
-      const fogMag = -Math.min(speed * FOG_OFFSET_SCALE, FOG_OFFSET_MAX);
-      fogOffset = { x: dirX * fogMag, y: dirY * fogMag };
-      fogOpacity = Math.min(FOG_OPACITY_BASE + speed * FOG_OPACITY_VEL_SCALE, 0.34);
-      fogScale = 1 + Math.min(speed * FOG_SCALE_VEL_SCALE, FOG_SCALE_MAX_DELTA);
+      dirX = this.tipVelocity.x / speed;
+      dirY = this.tipVelocity.y / speed;
+    } else {
+      const fallbackAngle = BASE_HEADING + idleAngleOffset;
+      dirX = Math.cos(fallbackAngle);
+      dirY = Math.sin(fallbackAngle);
     }
+
+    // Body backward offset (along velocity direction)
+    const bodyMag = -Math.min(speed * BODY_OFFSET_SCALE, BODY_OFFSET_MAX);
+    const bodyBackX = dirX * bodyMag;
+    const bodyBackY = dirY * bodyMag;
+
+    // Body lateral offset (perpendicular, driven by angleVelocity)
+    const lateralAmount = Math.max(-BODY_LATERAL_MAX,
+      Math.min(BODY_LATERAL_MAX, this.angleVelocity * BODY_LATERAL_SCALE));
+    // perpendicular of (dirX, dirY) is (-dirY, dirX)
+    const lateralX = -dirY * lateralAmount;
+    const lateralY = dirX * lateralAmount;
+
+    const bodyOffset = { x: bodyBackX + lateralX, y: bodyBackY + lateralY };
+
+    // Fog offset: backward + lateral * 0.6
+    const fogMag = -Math.min(speed * FOG_OFFSET_SCALE, FOG_OFFSET_MAX);
+    const fogOffset = {
+      x: dirX * fogMag + lateralX * 0.6,
+      y: dirY * fogMag + lateralY * 0.6,
+    };
+
+    const fogOpacity = Math.min(FOG_OPACITY_BASE + speed * FOG_OPACITY_VEL_SCALE, 0.34);
+    const fogScale = 1 + Math.min(speed * FOG_SCALE_VEL_SCALE, FOG_SCALE_MAX_DELTA);
 
     return {
       tip: this.tip,
       angle: rotation,
       velocity: this.tipVelocity,
+      angleVelocity: this.angleVelocity,
       bodyOffset,
       fogOffset,
       fogOpacity,
@@ -203,6 +225,7 @@ export class CursorMotionEngine {
     this.dynamics.reset(this.position);
 
     this._rafId = null;
+    this._lastStepTime = null;
     this._currentMove = null; // { resolve, reject, startTime, path, springState, progress, ... }
     this._idleStartedAt = null;
 
@@ -357,6 +380,11 @@ export class CursorMotionEngine {
   }
 
   _step(now) {
+    // Compute actual delta time, clamped to [1/240, 1/24] like reference
+    const rawDelta = this._lastStepTime != null ? (now - this._lastStepTime) : (1 / 60);
+    const clampedDelta = Math.max(1 / 240, Math.min(rawDelta, 1 / 24));
+    this._lastStepTime = now;
+
     if (this._currentMove) {
       const move = this._currentMove;
       if (move.startTime == null) move.startTime = now;
@@ -392,7 +420,7 @@ export class CursorMotionEngine {
     } else if (this.phase === 'idle') {
       // Continue driving visual dynamics while settling.
       // Reference: idlePhase += clampedDelta * 3; wobble = sin(phase * 0.8) * π/12
-      this.idlePhase += (1 / 60) * 3;
+      this.idlePhase += clampedDelta * 3;
       const idleAngleOffset = this.idleEnabled
         ? Math.sin(this.idlePhase * 0.8) * WOBBLE_AMPLITUDE
         : 0;

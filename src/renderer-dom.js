@@ -1,26 +1,33 @@
 // Drop-in DOM renderer. Pairs with CursorMotionEngine.onUpdate to draw a
 // soft cursor (tip + glow + click pulse) on top of any web page or
 // container. No external dependencies.
+//
+// The glyph matches the official reference: dark charcoal fill with white
+// stroke, neutral orientation pointing upper-left (-135°). The fog/glow is
+// rendered as a separate element to allow independent offset/scale/opacity.
+
+// Pointer shape derived from the reference SynthesizedCursorGlyphView contour.
+// Coordinate system: 48×48 viewBox, pointer centered, tip at upper-left.
+// The shape path is scaled from the original 48×48 pixel contour data.
+const POINTER_PATH = 'M14.5 6.5 L10.5 29.5 L17 21 L29 19 Z';
 
 const DEFAULT_GLYPH_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="overflow:visible">
   <defs>
-    <radialGradient id="cm-fog" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.85)"/>
-      <stop offset="55%" stop-color="rgba(255,255,255,0.18)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    <radialGradient id="cm-fog">
+      <stop offset="0%" stop-color="rgba(97,92,89,0.40)"/>
+      <stop offset="50%" stop-color="rgba(110,105,102,0.28)"/>
+      <stop offset="82%" stop-color="rgba(117,112,110,0.11)"/>
+      <stop offset="100%" stop-color="rgba(153,153,153,0)"/>
     </radialGradient>
-    <linearGradient id="cm-body" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#d8dcec"/>
-    </linearGradient>
   </defs>
-  <circle cx="16" cy="16" r="15" fill="url(#cm-fog)"/>
-  <path d="M9 7 L23 15 L15 17 L13 25 Z"
-        fill="url(#cm-body)"
-        stroke="rgba(20,24,40,0.55)"
-        stroke-width="0.9"
-        stroke-linejoin="round"/>
+  <circle class="cm-fog-circle" cx="24" cy="24" r="33" fill="url(#cm-fog)"/>
+  <path class="cm-pointer" d="${POINTER_PATH}"
+        fill="rgba(97,92,89,0.98)"
+        stroke="rgba(230,230,230,0.92)"
+        stroke-width="1.55"
+        stroke-linejoin="round"
+        stroke-linecap="round"/>
 </svg>
 `.trim();
 
@@ -31,7 +38,7 @@ export class DomCursorRenderer {
     showTrail = false,
     showCandidates = false,
     glyphHTML = DEFAULT_GLYPH_SVG,
-    size = 32,
+    size = 48,
   } = {}) {
     this.container = container;
     this.size = size;
@@ -61,15 +68,15 @@ export class DomCursorRenderer {
     this.svg.setAttribute('preserveAspectRatio', 'none');
     this.root.appendChild(this.svg);
 
-    // Cursor glyph.
+    // Cursor glyph container.
     this.glyph = document.createElement('div');
     Object.assign(this.glyph.style, {
       position: 'absolute',
       width: `${size}px`,
       height: `${size}px`,
-      transformOrigin: '25% 25%', // tip anchor near the upper-left
-      transform: 'translate(-25%, -25%)',
-      filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.18))',
+      // Tip of the pointer is at roughly 30%/14% in our 48x48 viewBox
+      transformOrigin: '30% 14%',
+      transform: 'translate(-30%, -14%)',
       willChange: 'transform',
     });
     this.glyph.innerHTML = glyphHTML;
@@ -86,23 +93,32 @@ export class DomCursorRenderer {
     const { tip, angle, clickProgress, candidate, candidates, bodyOffset, fogOffset, fogOpacity, fogScale } = state;
     if (!tip) return;
 
-    // The cursor SVG artwork already has its tip pointing upper-left (~-135°).
-    // The `angle` from visual dynamics is 0 at rest (upper-left),
-    // so we just apply it directly as the rotation.
-    const sc = 1 - clickProgress * 0.18;
+    // Motion compression: subtle squash along velocity
+    const bodyMag = Math.hypot(bodyOffset?.x ?? 0, bodyOffset?.y ?? 0);
+    const motionComp = Math.min(bodyMag * 0.008, 0.018);
+    const pulseComp = clickProgress * 0.03;
+    const scX = 1 - motionComp - pulseComp;
+    const scY = 1 + (pulseComp * 0.4);
+
     const bx = bodyOffset?.x ?? 0;
     const by = bodyOffset?.y ?? 0;
     this.glyph.style.transform =
-      `translate(${tip.x + bx}px, ${tip.y + by}px) translate(-25%, -25%) ` +
-      `rotate(${angle}rad) scale(${sc})`;
+      `translate(${tip.x + bx}px, ${tip.y + by}px) translate(-30%, -14%) ` +
+      `rotate(${angle}rad) scale(${scX}, ${scY})`;
 
-    // Update fog circle opacity/scale if the glyph has one
-    const fogEl = this.glyph.querySelector('circle');
-    if (fogEl && fogOpacity != null) {
-      fogEl.style.opacity = String(Math.min(fogOpacity / 0.34, 1));
+    // Update fog circle: separate offset, opacity, and scale
+    const fogEl = this.glyph.querySelector('.cm-fog-circle');
+    if (fogEl) {
+      const fox = fogOffset?.x ?? 0;
+      const foy = fogOffset?.y ?? 0;
       const fs = fogScale ?? 1;
-      fogEl.setAttribute('transform', `scale(${fs})`);
-      fogEl.setAttribute('transform-origin', '16 16');
+      const fo = fogOpacity ?? 0.12;
+      // Fog opacity multiplier relative to base (0.12)
+      const opacityMul = Math.max(0.28, Math.min(fo / 0.12, 2.2));
+      fogEl.style.opacity = String(Math.min(opacityMul, 1));
+      // The fog offset is relative to the pointer; translate within the SVG
+      fogEl.setAttribute('transform', `translate(${fox * 0.7} ${foy * 0.7}) scale(${fs})`);
+      fogEl.setAttribute('transform-origin', '24 24');
     }
 
     if (this.showTrail) {
