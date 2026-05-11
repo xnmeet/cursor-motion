@@ -3,14 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cursor Motion — Playground</title>
+<title>Cursor Motion JS — Physics-based cursor animation</title>
+<meta name="description" content="Spring-driven cursor motion with bezier path intelligence. Zero dependencies, 4KB gzipped.">
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
   --ink: #1d1d1f;
-  --graphite: #707070;
-  --slate: #474747;
+  --graphite: #6e6e73;
+  --slate: #424245;
   --fog: #f5f5f7;
   --snow: #ffffff;
   --azure: #0071e3;
@@ -19,14 +20,16 @@
   --obsidian: #000000;
   --radius-card: 28px;
   --radius-pill: 999px;
+  --radius-btn: 980px;
 }
 
 html {
-  font-family: -apple-system, 'SF Pro Text', 'Inter', system-ui, sans-serif;
+  font-family: -apple-system, 'SF Pro Display', 'SF Pro Text', 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--fog);
   color: var(--ink);
+  scroll-behavior: smooth;
 }
 
 body { overflow-x: hidden; }
@@ -36,74 +39,148 @@ body { overflow-x: hidden; }
   font-size: clamp(56px, 8vw, 96px);
   font-weight: 700;
   line-height: 1.04;
-  letter-spacing: -0.022em;
+  letter-spacing: -0.025em;
 }
 .heading-lg {
-  font-size: clamp(40px, 5vw, 56px);
+  font-size: clamp(40px, 5vw, 64px);
   font-weight: 700;
-  line-height: 1.07;
-  letter-spacing: -0.016em;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
 }
 .heading {
-  font-size: clamp(28px, 3.5vw, 40px);
+  font-size: clamp(28px, 3.5vw, 48px);
   font-weight: 600;
-  line-height: 1.17;
-  letter-spacing: -0.015em;
+  line-height: 1.12;
+  letter-spacing: -0.018em;
+}
+.heading-sm {
+  font-size: clamp(22px, 2.5vw, 32px);
+  font-weight: 600;
+  line-height: 1.19;
+  letter-spacing: -0.012em;
 }
 .subheading {
-  font-size: 20px;
-  font-weight: 300;
-  line-height: 1.4;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.38;
   letter-spacing: -0.01em;
   color: var(--graphite);
 }
 .body { font-size: 17px; font-weight: 400; line-height: 1.47; letter-spacing: -0.006em; }
-.body-sm { font-size: 14px; font-weight: 400; line-height: 1.43; letter-spacing: -0.003em; color: var(--graphite); }
-.caption { font-size: 12px; line-height: 1.33; letter-spacing: -0.02em; color: var(--graphite); }
+.caption { font-size: 12px; line-height: 1.33; letter-spacing: 0em; color: var(--graphite); }
 
 /* ===== Layout ===== */
-.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.container { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.section-gap { padding: 120px 0; }
+.text-center { text-align: center; }
 
 /* ===== Nav ===== */
 .nav {
   position: sticky; top: 0; z-index: 1000;
-  background: rgba(245, 245, 247, 0.85);
-  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--silver-mist);
+  background: rgba(245, 245, 247, 0.72);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 0.5px solid rgba(0,0,0,0.08);
   height: 52px; display: flex; align-items: center;
 }
 .nav .container { display: flex; align-items: center; justify-content: space-between; width: 100%; }
-.nav-brand { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
-.nav-brand span { font-weight: 300; color: var(--graphite); }
-.nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+.nav-brand { font-size: 20px; font-weight: 700; letter-spacing: -0.015em; color: var(--ink); text-decoration: none; }
+.nav-brand span { font-weight: 300; color: var(--graphite); margin-left: 2px; }
+.nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
 .nav-links a { font-size: 14px; font-weight: 400; color: var(--ink); text-decoration: none; transition: color 0.2s; }
 .nav-links a:hover { color: var(--azure); }
 .btn-primary {
-  display: inline-flex; align-items: center;
-  background: var(--azure); color: #fff; border-radius: var(--radius-pill);
-  padding: 8px 20px; font-size: 14px; font-weight: 400;
-  text-decoration: none; transition: background 0.2s; border: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--azure); color: #fff; border-radius: var(--radius-btn);
+  padding: 10px 22px; font-size: 15px; font-weight: 400;
+  text-decoration: none; transition: all 0.2s; border: none; cursor: pointer;
+  white-space: nowrap;
 }
-.btn-primary:hover { background: #005bb5; }
+.btn-primary:hover { background: #005bb5; transform: scale(1.02); }
+.btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--azure); border-radius: var(--radius-btn);
+  padding: 10px 22px; font-size: 15px; font-weight: 400;
+  text-decoration: none; transition: all 0.2s; border: none; cursor: pointer;
+}
+.btn-secondary:hover { text-decoration: underline; }
+.btn-dark {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ink); color: #fff; border-radius: var(--radius-btn);
+  padding: 14px 32px; font-size: 17px; font-weight: 400;
+  text-decoration: none; transition: all 0.25s; border: none; cursor: pointer;
+}
+.btn-dark:hover { background: #333; transform: scale(1.02); }
+.btn-outline {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: var(--azure); border-radius: var(--radius-btn);
+  padding: 14px 32px; font-size: 17px; font-weight: 400;
+  text-decoration: none; transition: all 0.25s; border: 1.5px solid var(--azure); cursor: pointer;
+}
+.btn-outline:hover { background: var(--azure); color: #fff; }
 
 /* ===== Hero ===== */
 .hero {
   text-align: center;
-  padding: 100px 24px 40px;
+  padding: 96px 24px 48px;
+  position: relative;
 }
-.hero-label { font-size: 20px; font-weight: 400; letter-spacing: -0.005em; color: var(--graphite); margin-bottom: 12px; }
-.hero h1 { margin-bottom: 16px; }
+.hero-eyebrow {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--azure);
+  letter-spacing: -0.003em;
+  margin-bottom: 16px;
+}
+.hero h1 { margin-bottom: 20px; }
+.hero h1 .gradient-text {
+  background: linear-gradient(135deg, #0071e3 0%, #a855f7 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
 .hero-sub {
-  font-size: 24px; font-weight: 300; line-height: 1.33; letter-spacing: -0.015em;
-  color: var(--slate); max-width: 700px; margin: 0 auto 0;
+  font-size: clamp(19px, 2.2vw, 24px);
+  font-weight: 300;
+  line-height: 1.4;
+  letter-spacing: -0.012em;
+  color: var(--slate);
+  max-width: 640px;
+  margin: 0 auto 36px;
 }
+.hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; margin-bottom: 40px; }
+.hero-install {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: var(--ink); color: rgba(255,255,255,0.87);
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 15px; padding: 14px 24px; border-radius: 14px;
+  cursor: pointer; transition: transform 0.15s, background 0.2s;
+  border: none; user-select: all;
+}
+.hero-install:hover { background: #333; transform: scale(1.02); }
+.hero-install .dollar { color: rgba(255,255,255,0.4); user-select: none; }
+.hero-meta {
+  display: flex; align-items: center; justify-content: center; gap: 28px;
+  font-size: 13px; color: var(--graphite); margin-top: 20px;
+}
+.hero-meta span { display: flex; align-items: center; gap: 5px; }
+.hero-meta .dot { width: 5px; height: 5px; border-radius: 50%; background: #34c759; }
+
+/* ===== Motion Preview (animated logo area) ===== */
+.motion-preview {
+  width: 100%; max-width: 680px; height: 200px;
+  margin: 0 auto 0;
+  position: relative;
+  overflow: hidden;
+}
+.motion-preview svg { width: 100%; height: 100%; }
 
 /* ===== Playground ===== */
-.playground-section {
-  padding: 60px 24px 100px;
-}
+.playground-section { padding: 80px 24px 120px; }
+.playground-section .section-header { text-align: center; margin-bottom: 48px; }
+.playground-section .section-header h2 { margin-bottom: 12px; }
 .playground-wrapper {
-  max-width: 1200px;
+  max-width: 1120px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 280px;
@@ -114,23 +191,21 @@ body { overflow-x: hidden; }
   border-radius: var(--radius-card);
   position: relative;
   overflow: hidden;
-  min-height: 600px;
+  min-height: 560px;
+  border: 0.5px solid rgba(0,0,0,0.04);
 }
 .playground-canvas {
   position: absolute;
   inset: 0;
   cursor: crosshair;
 }
-.playground-canvas svg {
-  width: 100%;
-  height: 100%;
-}
+.playground-canvas svg { width: 100%; height: 100%; }
 .playground-hint {
   position: absolute;
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0,0,0,0.05);
+  background: rgba(0,0,0,0.04);
   border-radius: var(--radius-pill);
   padding: 8px 18px;
   font-size: 13px;
@@ -141,88 +216,70 @@ body { overflow-x: hidden; }
 .playground-hint.hidden { opacity: 0; }
 
 /* Panel */
-.playground-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+.playground-panel { display: flex; flex-direction: column; gap: 14px; }
 .panel-card {
   background: var(--snow);
-  border-radius: var(--radius-card);
-  padding: 24px;
+  border-radius: 20px;
+  padding: 20px;
+  border: 0.5px solid rgba(0,0,0,0.04);
 }
 .panel-card h3 {
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: -0.01em;
-  margin-bottom: 16px;
+  letter-spacing: 0.04em;
+  margin-bottom: 14px;
   text-transform: uppercase;
   color: var(--graphite);
 }
 .param-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
 }
 .param-row:last-child { margin-bottom: 0; }
-.param-label {
-  font-size: 13px;
-  color: var(--slate);
-  font-weight: 500;
-}
+.param-label { font-size: 13px; color: var(--slate); font-weight: 500; }
 .param-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  min-width: 42px;
-  text-align: right;
+  font-size: 12px; font-weight: 600; color: var(--ink);
+  min-width: 38px; text-align: right;
   font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', monospace;
 }
 .param-row input[type="range"] {
-  flex: 1;
-  margin: 0 10px;
-  accent-color: var(--azure);
-  height: 4px;
+  flex: 1; margin: 0 8px;
+  accent-color: var(--azure); height: 4px;
+  -webkit-appearance: none; appearance: none;
+  background: var(--silver-mist); border-radius: 2px; outline: none;
+}
+.param-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--azure); cursor: pointer;
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
 .toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 10px;
 }
 .toggle-row:last-child { margin-bottom: 0; }
 .toggle-label { font-size: 13px; color: var(--slate); font-weight: 500; }
 .toggle {
-  position: relative;
-  width: 40px;
-  height: 24px;
-  background: var(--silver-mist);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: background 0.2s;
+  position: relative; width: 38px; height: 22px;
+  background: var(--silver-mist); border-radius: 11px;
+  cursor: pointer; transition: background 0.2s;
 }
 .toggle.active { background: var(--azure); }
 .toggle::after {
-  content: '';
-  position: absolute;
-  top: 3px; left: 3px;
-  width: 18px; height: 18px;
-  background: #fff;
-  border-radius: 50%;
-  transition: transform 0.2s;
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px; background: #fff;
+  border-radius: 50%; transition: transform 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
 }
 .toggle.active::after { transform: translateX(16px); }
 
 .action-btn {
-  width: 100%;
-  padding: 12px;
-  border: none;
-  border-radius: 14px;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
+  width: 100%; padding: 11px;
+  border: none; border-radius: 12px;
+  font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s;
 }
 .action-btn:active { transform: scale(0.97); }
 .action-btn.primary { background: var(--azure); color: #fff; }
@@ -230,31 +287,167 @@ body { overflow-x: hidden; }
 .action-btn.secondary { background: var(--fog); color: var(--ink); }
 .action-btn.secondary:hover { background: var(--silver-mist); }
 
-/* Legend */
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 4px;
+.legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--graphite); }
+.legend-dot { width: 14px; height: 3px; border-radius: 2px; }
+
+/* ===== Features ===== */
+.features-section { padding: 100px 24px; background: var(--snow); }
+.features-section .section-header { text-align: center; margin-bottom: 64px; }
+.features-section .section-header p { margin-top: 12px; }
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 1120px;
+  margin: 0 auto;
 }
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--graphite);
+.feature-card {
+  padding: 36px 28px;
+  border-radius: 24px;
+  background: var(--fog);
+  transition: transform 0.25s;
 }
-.legend-dot {
-  width: 12px;
-  height: 3px;
-  border-radius: 2px;
+.feature-card:hover { transform: translateY(-4px); }
+.feature-icon {
+  width: 48px; height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 14px; margin-bottom: 20px;
+  font-size: 22px;
+}
+.feature-card h3 {
+  font-size: 19px; font-weight: 600; letter-spacing: -0.01em;
+  margin-bottom: 8px;
+}
+.feature-card p {
+  font-size: 15px; line-height: 1.47; color: var(--graphite);
 }
 
-/* Responsive */
+/* ===== Code Demo ===== */
+.code-section { padding: 100px 24px; }
+.code-section .container { max-width: 1120px; }
+.code-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+}
+.code-text h2 { margin-bottom: 16px; }
+.code-text p { font-size: 17px; line-height: 1.53; color: var(--graphite); margin-bottom: 24px; }
+.code-text ul { list-style: none; padding: 0; }
+.code-text ul li {
+  font-size: 15px; color: var(--slate); padding: 8px 0;
+  display: flex; align-items: center; gap: 10px;
+}
+.code-text ul li::before { content: '✓'; color: var(--azure); font-weight: 600; font-size: 16px; }
+.code-block {
+  background: #1d1d1f;
+  border-radius: 20px;
+  padding: 28px 32px;
+  overflow-x: auto;
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #e5e5ea;
+  position: relative;
+}
+.code-block .comment { color: #6e6e73; }
+.code-block .keyword { color: #ff79c6; }
+.code-block .string { color: #a5d6ff; }
+.code-block .function { color: #7ee787; }
+.code-block .number { color: #ffa657; }
+.code-block .type { color: #ff7b72; }
+.code-lang {
+  position: absolute; top: 14px; right: 18px;
+  font-size: 11px; color: rgba(255,255,255,0.3);
+  font-family: -apple-system, sans-serif; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+/* ===== Metrics / Stats ===== */
+.metrics-section {
+  padding: 80px 24px;
+  background: var(--snow);
+}
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: center;
+}
+.metric-item {}
+.metric-value {
+  font-size: clamp(40px, 5vw, 56px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  background: linear-gradient(135deg, var(--ink) 0%, var(--slate) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.metric-label {
+  font-size: 14px;
+  color: var(--graphite);
+  margin-top: 6px;
+  font-weight: 400;
+}
+
+/* ===== How it Works ===== */
+.how-section { padding: 100px 24px; }
+.how-section .section-header { text-align: center; margin-bottom: 64px; }
+.how-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.how-step { text-align: center; }
+.how-step-number {
+  width: 48px; height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--azure) 0%, #a855f7 100%);
+  color: #fff; font-size: 18px; font-weight: 700;
+  margin: 0 auto 20px;
+}
+.how-step h3 { font-size: 19px; font-weight: 600; margin-bottom: 8px; }
+.how-step p { font-size: 15px; color: var(--graphite); line-height: 1.5; max-width: 280px; margin: 0 auto; }
+
+/* ===== CTA ===== */
+.cta-section {
+  padding: 120px 24px;
+  text-align: center;
+}
+.cta-section h2 { margin-bottom: 16px; }
+.cta-section p { font-size: 19px; color: var(--graphite); margin-bottom: 36px; max-width: 500px; margin-left: auto; margin-right: auto; margin-bottom: 36px; }
+.cta-actions { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+
+/* ===== Footer ===== */
+.footer {
+  padding: 40px 24px;
+  border-top: 0.5px solid rgba(0,0,0,0.06);
+  text-align: center;
+}
+.footer p { font-size: 13px; color: var(--graphite); }
+.footer a { color: var(--azure); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* ===== Responsive ===== */
 @media (max-width: 900px) {
   .playground-wrapper { grid-template-columns: 1fr; }
-  .playground-canvas-wrap { min-height: 450px; }
+  .playground-canvas-wrap { min-height: 400px; }
+  .features-grid { grid-template-columns: 1fr; }
+  .code-layout { grid-template-columns: 1fr; gap: 40px; }
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  .how-steps { grid-template-columns: 1fr; gap: 40px; }
   .nav-links { display: none; }
+  .hero { padding-top: 72px; }
+}
+@media (max-width: 600px) {
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
 }
 </style>
 </head>
@@ -263,23 +456,69 @@ body { overflow-x: hidden; }
 <!-- Nav -->
 <nav class="nav">
   <div class="container">
-    <a href="#" class="nav-brand">Cursor Motion <span>js</span></a>
+    <a href="#" class="nav-brand">cursor-motion<span>.js</span></a>
     <ul class="nav-links">
-      <li><a href="https://github.com/iFurySt/open-codex-computer-use">GitHub</a></li>
-      <li><a href="#" class="btn-primary">npm install cursor-motion-js</a></li>
+      <li><a href="#playground">Playground</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#code">Docs</a></li>
+      <li><a href="https://github.com/" target="_blank">GitHub</a></li>
+      <li><a href="#cta" class="btn-primary">Get Started</a></li>
     </ul>
   </div>
 </nav>
 
 <!-- Hero -->
 <section class="hero">
-  <p class="hero-label">Interactive Playground</p>
-  <h1 class="display">See the curve.</h1>
-  <p class="hero-sub">Click two points to watch spring-driven motion unfold. Every path, every candidate, every frame — visible.</p>
+  <span class="hero-eyebrow">Open Source &middot; TypeScript &middot; Zero Dependencies</span>
+  <h1 class="display">Cursor motion<br>that <span class="gradient-text">feels alive.</span></h1>
+  <p class="hero-sub">Spring physics + intelligent path selection. Move cursors between any two points with natural, organic trajectories — in 4KB.</p>
+  <div class="hero-actions">
+    <button class="hero-install" onclick="navigator.clipboard.writeText('npm install cursor-motion-js')">
+      <span class="dollar">$</span> npm install cursor-motion-js
+    </button>
+    <a href="#playground" class="btn-secondary">Try it live &darr;</a>
+  </div>
+  <div class="hero-meta">
+    <span><span class="dot"></span> v0.2.0</span>
+    <span>4KB gzipped</span>
+    <span>TypeScript native</span>
+    <span>MIT License</span>
+  </div>
+</section>
+
+<!-- Motion Preview -->
+<div class="motion-preview" id="hero-motion">
+  <svg id="hero-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<!-- Stats -->
+<section class="metrics-section">
+  <div class="metrics-grid">
+    <div class="metric-item">
+      <div class="metric-value">0</div>
+      <div class="metric-label">Dependencies</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-value">4KB</div>
+      <div class="metric-label">Gzipped size</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-value">240</div>
+      <div class="metric-label">Physics steps/s</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-value">7</div>
+      <div class="metric-label">Path candidates</div>
+    </div>
+  </div>
 </section>
 
 <!-- Playground -->
-<section class="playground-section">
+<section class="playground-section" id="playground">
+  <div class="section-header">
+    <h2 class="heading">Interactive Playground</h2>
+    <p class="subheading">Click two points. Watch the physics unfold.</p>
+  </div>
   <div class="playground-wrapper">
     <!-- Canvas -->
     <div class="playground-canvas-wrap">
@@ -290,7 +529,6 @@ body { overflow-x: hidden; }
     </div>
     <!-- Panel -->
     <div class="playground-panel">
-      <!-- Controls -->
       <div class="panel-card">
         <h3>Spring</h3>
         <div class="param-row">
@@ -330,21 +568,21 @@ body { overflow-x: hidden; }
       <div class="panel-card">
         <h3>Display</h3>
         <div class="toggle-row">
-          <span class="toggle-label">Show Candidates</span>
+          <span class="toggle-label">Candidates</span>
           <div class="toggle active" id="t-candidates"></div>
         </div>
         <div class="toggle-row">
-          <span class="toggle-label">Show Trail</span>
+          <span class="toggle-label">Trail</span>
           <div class="toggle active" id="t-trail"></div>
         </div>
         <div class="toggle-row">
-          <span class="toggle-label">Show Cursor</span>
+          <span class="toggle-label">Cursor</span>
           <div class="toggle active" id="t-cursor"></div>
         </div>
         <div class="legend">
-          <div class="legend-item"><div class="legend-dot" style="background:#fff;border:1px solid #ccc;"></div>Chosen path</div>
-          <div class="legend-item"><div class="legend-dot" style="background:rgba(0,113,227,0.5);"></div>Candidates</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#ff6b35;"></div>Cursor trail</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#1d1d1f;"></div>Chosen</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(0,113,227,0.45);"></div>Candidates</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#ff6b35;"></div>Trail</div>
         </div>
       </div>
       <button class="action-btn primary" id="btn-replay">Replay</button>
@@ -352,6 +590,137 @@ body { overflow-x: hidden; }
     </div>
   </div>
 </section>
+
+<!-- Features -->
+<section class="features-section" id="features">
+  <div class="section-header">
+    <h2 class="heading">Built for realism.</h2>
+    <p class="subheading">Every detail tuned to produce motion that feels genuinely human.</p>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon" style="background: rgba(0,113,227,0.08); color: var(--azure);">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83M9.76 14.24l-2.83 2.83m12.14 0l-2.83-2.83M9.76 9.76L6.93 6.93"/></svg>
+      </div>
+      <h3>Spring Physics</h3>
+      <p>Velocity-Verlet integration at 240Hz. Underdamped springs produce natural overshoot and settle, just like real physical systems.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background: rgba(168,85,247,0.08); color: #a855f7;">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3c4.5 0 4.5 18 9 18s4.5-18 9-18"/></svg>
+      </div>
+      <h3>7-Path Intelligence</h3>
+      <p>Generates 7 candidate bezier paths per move — direct, turn, brake, orbit — then scores each on length, curvature, and context.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background: rgba(52,199,89,0.08); color: #34c759;">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      </div>
+      <h3>Zero Allocation</h3>
+      <p>Hot path uses flat scalars and pre-allocated outputs. No GC pressure, no frame drops — even at sustained 60fps.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background: rgba(255,149,0,0.08); color: #ff9500;">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 12h6m-3-3v6"/></svg>
+      </div>
+      <h3>Visual Dynamics</h3>
+      <p>Independent tip spring + angle spring create realistic cursor tilt and lag. The pointer rotates into its heading naturally.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background: rgba(255,59,48,0.08); color: #ff3b30;">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      </div>
+      <h3>Dirty-Check DOM</h3>
+      <p>Renderer skips identical transforms. Only writes to DOM when values actually change — no forced reflows, no layout thrash.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background: rgba(88,86,214,0.08); color: #5856d6;">
+        <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      </div>
+      <h3>TypeScript Native</h3>
+      <p>Written in strict TypeScript with full type exports. Every config, state, and output is properly typed for IDE intelligence.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Code -->
+<section class="code-section" id="code">
+  <div class="container">
+    <div class="code-layout">
+      <div class="code-text">
+        <h2 class="heading-sm">Three lines to natural motion.</h2>
+        <p>Import the engine, set your target, and let physics handle the rest. Full control over spring parameters when you need it.</p>
+        <ul>
+          <li>Auto path selection from 7 candidates</li>
+          <li>Configurable spring response & damping</li>
+          <li>Built-in DOM renderer with fog effect</li>
+          <li>Chain multiple moves seamlessly</li>
+          <li>Full event callbacks (start, move, end)</li>
+        </ul>
+      </div>
+      <div class="code-block">
+        <span class="code-lang">TypeScript</span>
+<span class="keyword">import</span> { CursorMotion } <span class="keyword">from</span> <span class="string">'cursor-motion-js'</span>
+
+<span class="comment">// Initialize with spring config</span>
+<span class="keyword">const</span> cursor = <span class="keyword">new</span> <span class="function">CursorMotion</span>({
+  response: <span class="number">1.4</span>,
+  damping: <span class="number">0.9</span>,
+  container: document.<span class="function">querySelector</span>(<span class="string">'.app'</span>)
+})
+
+<span class="comment">// Move to target — physics handles the path</span>
+cursor.<span class="function">moveTo</span>({ x: <span class="number">420</span>, y: <span class="number">280</span> })
+
+<span class="comment">// Chain moves with custom options</span>
+<span class="keyword">await</span> cursor.<span class="function">moveTo</span>(
+  { x: <span class="number">800</span>, y: <span class="number">150</span> },
+  { arcSize: <span class="number">0.12</span>, arcFlow: <span class="number">0.7</span> }
+)
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How it Works -->
+<section class="how-section" style="background: var(--snow);">
+  <div class="section-header">
+    <h2 class="heading">How it works</h2>
+    <p class="subheading">Physics simulation in three stages.</p>
+  </div>
+  <div class="how-steps">
+    <div class="how-step">
+      <div class="how-step-number">1</div>
+      <h3>Generate Candidates</h3>
+      <p>7 bezier paths are generated based on direction, heading, and distance — direct, turn, brake, and orbit families.</p>
+    </div>
+    <div class="how-step">
+      <div class="how-step-number">2</div>
+      <h3>Score & Select</h3>
+      <p>Each path is measured for length, curvature energy, and turn demand. The lowest-score path wins — naturally favoring smooth motion.</p>
+    </div>
+    <div class="how-step">
+      <div class="how-step-number">3</div>
+      <h3>Spring Animate</h3>
+      <p>A Velocity-Verlet spring drives progress along the chosen path at 240Hz, while tip and angle springs add realistic dynamics.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section" id="cta">
+  <h2 class="heading-lg">Ready to ship<br>natural motion?</h2>
+  <p>Add lifelike cursor animation to your app in under a minute.</p>
+  <div class="cta-actions">
+    <a href="#" class="btn-dark">View Documentation</a>
+    <a href="https://github.com/" target="_blank" class="btn-outline">GitHub Repository</a>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+  <p>cursor-motion-js &middot; MIT License &middot; Built with spring physics &middot; <a href="https://github.com/">GitHub</a></p>
+</footer>
 
 <script>
 // ============ INLINE ENGINE (minimal self-contained port) ============
@@ -366,7 +735,6 @@ function normalizeAngle(a) {
   return v;
 }
 
-// Vec2
 function v2(x, y) { return { x, y }; }
 function add(a, b) { return { x: a.x + b.x, y: a.y + b.y }; }
 function sub(a, b) { return { x: a.x - b.x, y: a.y - b.y }; }
@@ -376,7 +744,6 @@ function norm(a, fb = { x: 1, y: 0 }) { const l = len(a); return l < EPS ? fb : 
 function perp(a) { return { x: -a.y, y: a.x }; }
 function signedAngle(lhs, rhs) { return Math.atan2(lhs.x * rhs.y - lhs.y * rhs.x, lhs.x * rhs.x + lhs.y * rhs.y); }
 
-// Path
 function sampleCubic(p0, c1, c2, p1, t) {
   const omt = 1 - t, omt2 = omt * omt, t2 = t * t;
   const a = omt2 * omt, b = 3 * omt2 * t, c = 3 * omt * t2, d = t2 * t;
@@ -400,7 +767,7 @@ function samplePath(path, progress) {
   const segStart = si === 0 ? path.start : segs[si - 1].end;
   return { point: sampleCubic(segStart, seg.control1, seg.control2, seg.end, lt), tangent: norm(sampleCubicTangent(segStart, seg.control1, seg.control2, seg.end, lt)) };
 }
-function measurePath(path, bounds) {
+function measurePath(path) {
   let totalLength = 0, angleChangeEnergy = 0, maxAngleChange = 0, totalTurn = 0;
   let staysInBounds = true, prev = path.start, prevAngle = null;
   const totalSteps = Math.max(path.segments.length * 24, 1);
@@ -425,7 +792,6 @@ function measurePath(path, bounds) {
   return { length: totalLength, angleChangeEnergy, maxAngleChange, totalTurn, staysInBounds };
 }
 
-// Candidates
 const DESCRIPTORS = [
   { id:'direct',family:'direct',kind:'base',side:0,arcScale:0.55,startReachScale:1.0,endReachScale:1.0,startNormalScale:0.35,endNormalScale:0.35,startLineWeight:1.0,startHeadingWeight:0.45,startGuideNormalBias:0.0,endLineWeight:1.0,endHeadingWeight:0.55,endGuideNormalBias:0.0,flowShift:0,startFlowWeight:0.7,endFlowWeight:0.7,scoreBias:0 },
   { id:'turn-left',family:'turn',kind:'arched',side:-1,arcScale:1.0,startReachScale:1.05,endReachScale:0.95,startNormalScale:1.0,endNormalScale:0.5,startLineWeight:0.55,startHeadingWeight:0.85,startGuideNormalBias:0.25,endLineWeight:0.85,endHeadingWeight:0.55,endGuideNormalBias:0.05,flowShift:-0.05,startFlowWeight:0.9,endFlowWeight:0.6,scoreBias:0 },
@@ -474,11 +840,9 @@ function makeCandidates({ start, end, startForward = {x:1,y:0}, endForward = {x:
   const endTurn = Math.abs(signedAngle(dir, ef));
   const td = Math.min(1, (startTurn + endTurn) / Math.PI);
   const directness = 1 - td;
-  const context = { distance, turnDemand: td, directness, preferredSide };
-
   return DESCRIPTORS.map(d => {
     const path = makePathFromDescriptor({ start, end, descriptor: d, startForward: sf, endForward: ef, params });
-    const measurement = measurePath(path, null);
+    const measurement = measurePath(path);
     const excessLength = Math.max(measurement.length / distance - 1, 0);
     let score = d.scoreBias + excessLength * 180 + measurement.angleChangeEnergy * 90 + measurement.maxAngleChange * 85 + measurement.totalTurn * (d.side === 0 ? 10 : 12);
     if (d.side === 0) score += td * 130;
@@ -523,9 +887,7 @@ function createSvgPath(d, stroke, width, dash = '', opacity = 1) {
 
 function createDot(x, y, r, fill, stroke = 'none', strokeWidth = 0) {
   const el = document.createElementNS(svgNS, 'circle');
-  el.setAttribute('cx', x);
-  el.setAttribute('cy', y);
-  el.setAttribute('r', r);
+  el.setAttribute('cx', x); el.setAttribute('cy', y); el.setAttribute('r', r);
   el.setAttribute('fill', fill);
   if (stroke !== 'none') { el.setAttribute('stroke', stroke); el.setAttribute('stroke-width', strokeWidth); }
   return el;
@@ -538,13 +900,11 @@ const POINTER_PATH = 'M13.3 7.0 L11.9 8.7 L11.2 10.3 L11.9 12.0 L11.9 13.6 L12.6
 function createCursorGlyph() {
   const g = document.createElementNS(svgNS, 'g');
   g.setAttribute('class', 'cursor-glyph');
-  // fog
   const fogCircle = document.createElementNS(svgNS, 'circle');
   fogCircle.setAttribute('r', '18');
-  fogCircle.setAttribute('fill', 'rgba(97,92,89,0.15)');
+  fogCircle.setAttribute('fill', 'rgba(97,92,89,0.12)');
   fogCircle.setAttribute('class', 'cursor-fog');
   g.appendChild(fogCircle);
-  // pointer
   const pointer = document.createElementNS(svgNS, 'g');
   pointer.setAttribute('class', 'cursor-pointer');
   const p = document.createElementNS(svgNS, 'path');
@@ -561,7 +921,7 @@ function createCursorGlyph() {
 
 // ============ STATE ============
 
-let state = 'idle'; // 'idle' | 'start-set' | 'animating'
+let state = 'idle';
 let startPoint = null;
 let endPoint = null;
 let candidates = null;
@@ -600,50 +960,40 @@ function clearCanvas() {
 }
 
 function drawScene() {
-  clearCanvas();
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-  // Draw candidates
   if (candidates && showCandidates) {
     for (const c of candidates) {
-      const isChosen = c === chosen;
-      if (!isChosen) {
-        const el = createSvgPath(pathToD(c.path), 'rgba(0,113,227,0.25)', '1.5', '6 4', 0.7);
+      if (c !== chosen) {
+        const el = createSvgPath(pathToD(c.path), 'rgba(0,113,227,0.2)', '1.5', '6 4', 0.6);
         svg.appendChild(el);
       }
     }
   }
 
-  // Draw chosen path
   if (chosen) {
-    const el = createSvgPath(pathToD(chosen.path), '#ffffff', '3', '', 1);
-    el.setAttribute('stroke', '#1d1d1f');
-    el.setAttribute('stroke-width', '2.5');
-    el.setAttribute('filter', '');
+    const glow = createSvgPath(pathToD(chosen.path), 'rgba(0,113,227,0.15)', '10', '', 0.4);
+    svg.appendChild(glow);
+    const el = createSvgPath(pathToD(chosen.path), '#1d1d1f', '2.5', '', 1);
     svg.appendChild(el);
-    // outer glow
-    const glow = createSvgPath(pathToD(chosen.path), 'rgba(0,113,227,0.2)', '8', '', 0.5);
-    svg.insertBefore(glow, svg.firstChild);
   }
 
-  // Trail
   if (showTrail && trailPoints.length > 1) {
     let d = `M${trailPoints[0].x},${trailPoints[0].y}`;
     for (let i = 1; i < trailPoints.length; i++) d += ` L${trailPoints[i].x},${trailPoints[i].y}`;
-    const el = createSvgPath(d, '#ff6b35', '2', '', 0.85);
+    const el = createSvgPath(d, '#ff6b35', '2.5', '', 0.85);
     svg.appendChild(el);
   }
 
-  // Start/end points
   if (startPoint) {
-    svg.appendChild(createDot(startPoint.x, startPoint.y, 7, 'rgba(0,113,227,0.15)', '#0071e3', 2));
-    svg.appendChild(createDot(startPoint.x, startPoint.y, 3, '#0071e3'));
+    svg.appendChild(createDot(startPoint.x, startPoint.y, 8, 'rgba(0,113,227,0.1)', '#0071e3', 2));
+    svg.appendChild(createDot(startPoint.x, startPoint.y, 3.5, '#0071e3'));
   }
   if (endPoint) {
-    svg.appendChild(createDot(endPoint.x, endPoint.y, 7, 'rgba(255,59,48,0.15)', '#ff3b30', 2));
-    svg.appendChild(createDot(endPoint.x, endPoint.y, 3, '#ff3b30'));
+    svg.appendChild(createDot(endPoint.x, endPoint.y, 8, 'rgba(255,59,48,0.1)', '#ff3b30', 2));
+    svg.appendChild(createDot(endPoint.x, endPoint.y, 3.5, '#ff3b30'));
   }
 
-  // Cursor glyph
   if (cursorGlyph) svg.appendChild(cursorGlyph);
 }
 
@@ -651,24 +1001,17 @@ function drawScene() {
 
 function runAnimation() {
   if (!chosen || !startPoint || !endPoint) return;
-
   state = 'animating';
   hint.classList.add('hidden');
   trailPoints = [];
 
-  // Remove old cursor
   if (cursorGlyph) { cursorGlyph.remove(); cursorGlyph = null; }
-  if (showCursor) {
-    cursorGlyph = createCursorGlyph();
-    svg.appendChild(cursorGlyph);
-  }
+  if (showCursor) { cursorGlyph = createCursorGlyph(); svg.appendChild(cursorGlyph); }
 
-  // Spring state
   const spring = getSpring();
   let progress = 0, sVel = 0, sForce = 0, sTime = 0;
   const path = chosen.path;
 
-  // Visual dynamics
   const TIP_STIFF = 1219, TIP_DRAG = -53;
   const ANG_STIFF = 685, ANG_DRAG = -42.9;
   const DT = 1/240, HALF_DT = DT * 0.5;
@@ -679,7 +1022,6 @@ function runAnimation() {
   let ang = 0, angVel = 0, angF = 0;
   let dynTime = 0;
 
-  // Compute close-enough time
   let ceCurrent = 0, ceVel = 0, ceForce = 0, ceTime = 0;
   let closeEnoughTime = 1.43;
   for (let step = 1; step < 4096; step++) {
@@ -706,7 +1048,6 @@ function runAnimation() {
     const normalized = Math.min(elapsed / duration, 1);
     const targetSpringTime = normalized * duration;
 
-    // Advance spring
     if ((targetSpringTime - sTime) > 1) sTime = targetSpringTime - 1/60;
     while (sTime < targetSpringTime) {
       const vh = sVel + sForce * (spring.dt * 0.5);
@@ -718,11 +1059,9 @@ function runAnimation() {
       sTime += spring.dt;
     }
 
-    // Sample path position
     const sample = samplePath(path, progress);
     const posX = sample.point.x, posY = sample.point.y;
 
-    // Advance visual dynamics
     const targetTime = now;
     if (dynTime === 0) dynTime = targetTime - DT;
     if ((targetTime - dynTime) > 1) dynTime = targetTime - 1/60;
@@ -750,27 +1089,19 @@ function runAnimation() {
       dynTime += DT;
     }
 
-    // Record trail
     if (frameCount % 2 === 0) trailPoints.push({ x: tipX, y: tipY });
-
-    // Update heading
     const speed = Math.sqrt(tvx*tvx + tvy*tvy);
     if (speed > 1) heading = norm({ x: tvx, y: tvy });
 
-    // Redraw
     drawScene();
 
-    // Position cursor glyph
     if (cursorGlyph && showCursor) {
-      const rot = ang;
-      cursorGlyph.setAttribute('transform', `translate(${tipX}, ${tipY}) rotate(${rot * 180 / Math.PI}) scale(0.6) translate(-14.4, -7)`);
+      cursorGlyph.setAttribute('transform', `translate(${tipX}, ${tipY}) rotate(${ang * 180 / Math.PI}) scale(0.6) translate(-14.4, -7)`);
     }
 
     frameCount++;
 
-    // Check done
     if (normalized >= 1 && progress >= 0.99) {
-      // Final snap
       trailPoints.push({ x: endPoint.x, y: endPoint.y });
       tipX = endPoint.x; tipY = endPoint.y;
       drawScene();
@@ -778,7 +1109,6 @@ function runAnimation() {
         cursorGlyph.setAttribute('transform', `translate(${tipX}, ${tipY}) rotate(${ang * 180 / Math.PI}) scale(0.6) translate(-14.4, -7)`);
       }
       state = 'start-set';
-      // Swap: end becomes new start for chaining
       startPoint = { ...endPoint };
       endPoint = null;
       hint.textContent = 'Click to set next target';
@@ -812,23 +1142,19 @@ canvas.addEventListener('click', (e) => {
     drawScene();
   } else if (state === 'start-set') {
     endPoint = { x, y };
-    // Generate candidates
     const params = getParams();
     candidates = makeCandidates({ start: startPoint, end: endPoint, startForward: heading, endForward: { x: 1, y: 0 }, params });
     chosen = chooseCandidate(candidates);
     drawScene();
-    // Start animation
-    setTimeout(() => runAnimation(), 100);
+    setTimeout(() => runAnimation(), 80);
   }
 });
 
-// Param sliders
 ['response','damping','startHandle','endHandle','arcSize','arcFlow'].forEach(id => {
   const input = document.getElementById('p-' + id);
   const val = document.getElementById('v-' + id);
   input.addEventListener('input', () => {
     val.textContent = parseFloat(input.value).toFixed(2);
-    // If we have start+end but not animating, regenerate
     if (startPoint && endPoint && state !== 'animating') {
       const params = getParams();
       candidates = makeCandidates({ start: startPoint, end: endPoint, startForward: heading, endForward: { x: 1, y: 0 }, params });
@@ -839,7 +1165,6 @@ canvas.addEventListener('click', (e) => {
   });
 });
 
-// Toggles
 function setupToggle(id, getter, setter) {
   const el = document.getElementById(id);
   el.addEventListener('click', () => {
@@ -853,7 +1178,6 @@ setupToggle('t-candidates', () => showCandidates, v => showCandidates = v);
 setupToggle('t-trail', () => showTrail, v => showTrail = v);
 setupToggle('t-cursor', () => showCursor, v => { showCursor = v; if (!v && cursorGlyph) { cursorGlyph.remove(); cursorGlyph = null; } });
 
-// Buttons
 document.getElementById('btn-replay').addEventListener('click', () => {
   if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
   if (startPoint && endPoint) {
@@ -862,8 +1186,6 @@ document.getElementById('btn-replay').addEventListener('click', () => {
     candidates = makeCandidates({ start: startPoint, end: endPoint, startForward: heading, endForward: { x: 1, y: 0 }, params });
     chosen = chooseCandidate(candidates);
     runAnimation();
-  } else if (chosen && startPoint) {
-    // Replay last with end = trail end or just skip
   }
 });
 
@@ -879,8 +1201,158 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   hint.classList.remove('hidden');
 });
 
-// Initial draw
 drawScene();
+
+// ============ HERO MOTION ANIMATION ============
+
+(function heroAnim() {
+  const heroSvg = document.getElementById('hero-svg');
+  if (!heroSvg) return;
+  const heroWrap = document.getElementById('hero-motion');
+  const W = heroWrap.offsetWidth || 680;
+  const H = 200;
+  heroSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  const pts = [
+    { x: W * 0.08, y: H * 0.6 },
+    { x: W * 0.28, y: H * 0.25 },
+    { x: W * 0.5, y: H * 0.7 },
+    { x: W * 0.72, y: H * 0.35 },
+    { x: W * 0.92, y: H * 0.55 },
+  ];
+
+  let currentIdx = 0;
+  let trail = [];
+  let hHeading = { x: 1, y: 0 };
+
+  function animateHeroStep() {
+    const nextIdx = (currentIdx + 1) % pts.length;
+    const start = pts[currentIdx];
+    const end = pts[nextIdx];
+    const params = { startHandle: 0.29, endHandle: 0.08, arcSize: 0.06, arcFlow: 0.64 };
+    const cands = makeCandidates({ start, end, startForward: hHeading, endForward: { x: 1, y: 0 }, params });
+    const ch = chooseCandidate(cands);
+    if (!ch) return;
+
+    const spring = { stiffness: 20.14, drag: 8.06, dt: 1/240 };
+    let prog = 0, sV = 0, sF = 0, sT = 0;
+    let tipX = start.x, tipY = start.y;
+    let tvx = 0, tvy = 0, tfx = 0, tfy = 0;
+    const TIP_S = 1219, TIP_D = -53;
+    const DT = 1/240, HDT = DT*0.5;
+    trail = [];
+    let dynT = 0;
+
+    const dur = 1.8;
+    const startT = performance.now() / 1000;
+
+    function hTick(nowMs) {
+      const now = nowMs / 1000;
+      const elapsed = now - startT;
+      const norm2 = Math.min(elapsed / dur, 1);
+      const targetT = norm2 * dur;
+
+      if ((targetT - sT) > 1) sT = targetT - 1/60;
+      while (sT < targetT) {
+        const vh = sV + sF * (spring.dt * 0.5);
+        const nx = prog + vh * spring.dt;
+        const f = spring.stiffness * (1 - nx) + (-spring.drag) * vh;
+        sV = vh + f * (spring.dt * 0.5);
+        sF = f; prog = nx; sT += spring.dt;
+      }
+
+      const sample = samplePath(ch.path, prog);
+      const posX = sample.point.x, posY = sample.point.y;
+
+      const tgtTime = now;
+      if (dynT === 0) dynT = tgtTime - DT;
+      if ((tgtTime - dynT) > 1) dynT = tgtTime - 1/60;
+      while (dynT < tgtTime) {
+        const hvx = tvx + tfx * HDT;
+        const hvy = tvy + tfy * HDT;
+        const nx2 = tipX + hvx * DT;
+        const ny2 = tipY + hvy * DT;
+        const fx = (posX - nx2) * TIP_S + TIP_D * hvx;
+        const fy = (posY - ny2) * TIP_S + TIP_D * hvy;
+        tvx = hvx + fx * HDT; tvy = hvy + fy * HDT;
+        tfx = fx; tfy = fy; tipX = nx2; tipY = ny2;
+        dynT += DT;
+      }
+
+      trail.push({ x: tipX, y: tipY });
+      if (trail.length > 120) trail.shift();
+
+      // Draw
+      while (heroSvg.firstChild) heroSvg.removeChild(heroSvg.firstChild);
+
+      // Faint path
+      const pathEl = document.createElementNS(svgNS, 'path');
+      pathEl.setAttribute('d', pathToD(ch.path));
+      pathEl.setAttribute('fill', 'none');
+      pathEl.setAttribute('stroke', 'rgba(0,113,227,0.08)');
+      pathEl.setAttribute('stroke-width', '2');
+      pathEl.setAttribute('stroke-linecap', 'round');
+      heroSvg.appendChild(pathEl);
+
+      // Trail
+      if (trail.length > 2) {
+        let td = `M${trail[0].x},${trail[0].y}`;
+        for (let i = 1; i < trail.length; i++) td += ` L${trail[i].x},${trail[i].y}`;
+        const trailEl = document.createElementNS(svgNS, 'path');
+        trailEl.setAttribute('d', td);
+        trailEl.setAttribute('fill', 'none');
+        trailEl.setAttribute('stroke', 'url(#hero-grad)');
+        trailEl.setAttribute('stroke-width', '3');
+        trailEl.setAttribute('stroke-linecap', 'round');
+        heroSvg.appendChild(trailEl);
+      }
+
+      // Dot
+      const dot = document.createElementNS(svgNS, 'circle');
+      dot.setAttribute('cx', tipX); dot.setAttribute('cy', tipY);
+      dot.setAttribute('r', '5');
+      dot.setAttribute('fill', '#0071e3');
+      heroSvg.appendChild(dot);
+
+      // waypoints
+      for (const pt of pts) {
+        const wp = document.createElementNS(svgNS, 'circle');
+        wp.setAttribute('cx', pt.x); wp.setAttribute('cy', pt.y);
+        wp.setAttribute('r', '3'); wp.setAttribute('fill', 'rgba(0,0,0,0.06)');
+        heroSvg.appendChild(wp);
+      }
+
+      if (norm2 >= 1) {
+        const spd = Math.sqrt(tvx*tvx + tvy*tvy);
+        if (spd > 1) hHeading = { x: tvx / spd, y: tvy / spd };
+        currentIdx = nextIdx;
+        setTimeout(animateHeroStep, 600);
+        return;
+      }
+
+      requestAnimationFrame(hTick);
+    }
+
+    requestAnimationFrame(hTick);
+  }
+
+  // Add gradient
+  const defs = document.createElementNS(svgNS, 'defs');
+  const grad = document.createElementNS(svgNS, 'linearGradient');
+  grad.setAttribute('id', 'hero-grad');
+  grad.setAttribute('gradientUnits', 'userSpaceOnUse');
+  const s1 = document.createElementNS(svgNS, 'stop');
+  s1.setAttribute('offset', '0%'); s1.setAttribute('stop-color', 'rgba(0,113,227,0)');
+  const s2 = document.createElementNS(svgNS, 'stop');
+  s2.setAttribute('offset', '40%'); s2.setAttribute('stop-color', 'rgba(0,113,227,0.4)');
+  const s3 = document.createElementNS(svgNS, 'stop');
+  s3.setAttribute('offset', '100%'); s3.setAttribute('stop-color', '#0071e3');
+  grad.appendChild(s1); grad.appendChild(s2); grad.appendChild(s3);
+  defs.appendChild(grad);
+  heroSvg.appendChild(defs);
+
+  setTimeout(animateHeroStep, 800);
+})();
 </script>
 </body>
 </html>
