@@ -1,21 +1,56 @@
 {
   "name": "cursor-motion-js",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Natural, spring-based cursor motion for the web. Port of the Codex Computer Use cursor motion model (open-codex-computer-use).",
   "type": "module",
-  "main": "src/index.js",
-  "module": "src/index.js",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.js",
-    "./vec2": "./src/vec2.js",
-    "./path": "./src/path.js",
-    "./candidates": "./src/candidates.js",
-    "./spring": "./src/spring.js",
-    "./engine": "./src/engine.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vec2": {
+      "types": "./dist/vec2.d.ts",
+      "import": "./dist/vec2.js"
+    },
+    "./path": {
+      "types": "./dist/path.d.ts",
+      "import": "./dist/path.js"
+    },
+    "./candidates": {
+      "types": "./dist/candidates.d.ts",
+      "import": "./dist/candidates.js"
+    },
+    "./spring": {
+      "types": "./dist/spring.d.ts",
+      "import": "./dist/spring.js"
+    },
+    "./engine": {
+      "types": "./dist/engine.d.ts",
+      "import": "./dist/engine.js"
+    },
+    "./renderer-dom": {
+      "types": "./dist/renderer-dom.d.ts",
+      "import": "./dist/renderer-dom.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    }
   },
-  "files": ["src", "README.md"],
+  "files": ["dist", "src", "README.md"],
   "scripts": {
-    "demo": "python3 -m http.server 8765 --directory ."
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "demo": "python3 -m http.server 8765 --directory .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
   },
   "keywords": [
     "cursor",
@@ -24,7 +59,8 @@
     "bezier",
     "animation",
     "computer-use",
-    "codex"
+    "codex",
+    "typescript"
   ],
   "license": "MIT",
   "author": "kuai-ge"
