@@ -110,6 +110,46 @@ export function advanceTo(
   return [cur, s];
 }
 
+/** Mutable variant used internally by the engine — avoids allocating SpringState per step. */
+export interface MutableSpringResult {
+  current: number;
+  velocity: number;
+  force: number;
+  time: number;
+}
+
+export function advanceToMut(
+  current: number,
+  target: number,
+  velocity: number,
+  force: number,
+  sTime: number,
+  targetTime: number,
+  config: SpringConfig = OFFICIAL_SPRING,
+): MutableSpringResult {
+  let cur = current;
+  let vel = velocity;
+  let f = force;
+  let t = sTime;
+  if ((targetTime - t) > 1) {
+    t = targetTime - 1 / 60;
+  }
+  const dt = config.dt;
+  const halfDt = dt * 0.5;
+  const stiff = config.stiffness;
+  const drag = -config.drag;
+  while (t < targetTime) {
+    const vHalf = vel + f * halfDt;
+    const next = cur + vHalf * dt;
+    const nf = stiff * (target - next) + drag * vHalf;
+    vel = vHalf + nf * halfDt;
+    f = nf;
+    cur = next;
+    t += dt;
+  }
+  return { current: cur, velocity: vel, force: f, time: t };
+}
+
 export function isCloseEnough(
   progress: number,
   target: number = 1,

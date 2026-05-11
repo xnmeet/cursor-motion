@@ -30,7 +30,7 @@ import {
   OFFICIAL_SPRING,
   buildSpringConfig,
   makeSpringState,
-  advanceTo,
+  advanceToMut,
   isCloseEnough,
   computeCloseEnoughTime,
 } from './spring.js';
@@ -47,6 +47,7 @@ const TIP_SPRING = makeVisualSpring(0.18, 0.76);
 const ANGLE_SPRING = makeVisualSpring(0.24, 0.82);
 const BASE_HEADING = -(3 * Math.PI / 4); // -135°
 const HEADING_VELOCITY_FLOOR = 14;
+const HEADING_VELOCITY_FLOOR_SQ = HEADING_VELOCITY_FLOOR * HEADING_VELOCITY_FLOOR;
 const WOBBLE_AMPLITUDE = Math.PI / 12;
 const BODY_OFFSET_SCALE = 0.0012;
 const BODY_OFFSET_MAX = 2.4;
@@ -59,135 +60,165 @@ const FOG_OPACITY_VEL_SCALE = 0.00006;
 const FOG_SCALE_VEL_SCALE = 0.00012;
 const FOG_SCALE_MAX_DELTA = 0.22;
 
+// Branchless normalizeAngle via modulo — avoids while loops.
+const TWO_PI = 2 * Math.PI;
 function normalizeAngle(a: number): number {
-  let val = a;
-  while (val > Math.PI) val -= 2 * Math.PI;
-  while (val < -Math.PI) val += 2 * Math.PI;
-  return val;
+  // Map to (-PI, PI] without loops
+  const v = a % TWO_PI;
+  if (v > Math.PI) return v - TWO_PI;
+  if (v <= -Math.PI) return v + TWO_PI;
+  return v;
 }
 
-// ---------- VisualDynamics ----------
+// ---------- VisualDynamics (zero-allocation hot path) ----------
+
+// Pre-allocated reusable output object to avoid per-frame GC pressure.
+const _renderOut: DynamicsRenderState = {
+  tip: { x: 0, y: 0 },
+  angle: 0,
+  velocity: { x: 0, y: 0 },
+  angleVelocity: 0,
+  bodyOffset: { x: 0, y: 0 },
+  fogOffset: { x: 0, y: 0 },
+  fogOpacity: 0,
+  fogScale: 1,
+};
 
 class VisualDynamics {
-  tip: Vec2 | null = null;
-  tipVelocity: Vec2 = { x: 0, y: 0 };
-  tipForce: Vec2 = { x: 0, y: 0 };
+  // All state stored as flat scalars — no object allocation in hot path.
+  tipX: number = 0;
+  tipY: number = 0;
+  tipVX: number = 0;
+  tipVY: number = 0;
+  tipFX: number = 0;
+  tipFY: number = 0;
   angle: number = 0;
   angleVelocity: number = 0;
   angleForce: number = 0;
   time: number = 0;
+  initialized: boolean = false;
 
-  reset(point: Vec2): void {
-    this.tip = { x: point.x, y: point.y };
-    this.tipVelocity = { x: 0, y: 0 };
-    this.tipForce = { x: 0, y: 0 };
+  reset(px: number, py: number): void {
+    this.tipX = px;
+    this.tipY = py;
+    this.tipVX = 0;
+    this.tipVY = 0;
+    this.tipFX = 0;
+    this.tipFY = 0;
     this.angle = 0;
     this.angleVelocity = 0;
     this.angleForce = 0;
     this.time = 0;
+    this.initialized = true;
   }
 
-  advance(target: Vec2, targetTime: number, { idleAngleOffset = 0 } = {}): DynamicsRenderState {
-    if (!this.tip) {
-      this.tip = { x: target.x, y: target.y };
+  advance(targetX: number, targetY: number, targetTime: number, idleAngleOffset: number): DynamicsRenderState {
+    if (!this.initialized) {
+      this.tipX = targetX;
+      this.tipY = targetY;
       this.time = targetTime;
+      this.initialized = true;
       return this._renderState(idleAngleOffset);
     }
 
+    // Stale-time clamp
     if ((targetTime - this.time) > 1) {
       this.time = targetTime - 1 / 60;
     }
 
+    // Inline Velocity-Verlet loop — the hottest path in the entire library.
+    const tipStiff = TIP_SPRING.stiffness;
+    const tipDrag = -TIP_SPRING.drag;
+    const angStiff = ANGLE_SPRING.stiffness;
+    const angDrag = -ANGLE_SPRING.drag;
+    const dt = TIP_SPRING.dt;
+    const halfDT = dt * 0.5;
+
     while (this.time < targetTime) {
-      this._step(target, idleAngleOffset);
+      // --- Tip position (2D) ---
+      const tvHalfX = this.tipVX + this.tipFX * halfDT;
+      const tvHalfY = this.tipVY + this.tipFY * halfDT;
+      const nextTipX = this.tipX + tvHalfX * dt;
+      const nextTipY = this.tipY + tvHalfY * dt;
+      const tipFX = (targetX - nextTipX) * tipStiff + tipDrag * tvHalfX;
+      const tipFY = (targetY - nextTipY) * tipStiff + tipDrag * tvHalfY;
+      this.tipVX = tvHalfX + tipFX * halfDT;
+      this.tipVY = tvHalfY + tipFY * halfDT;
+      this.tipFX = tipFX;
+      this.tipFY = tipFY;
+      this.tipX = nextTipX;
+      this.tipY = nextTipY;
+
+      // --- Angle (1D) ---
+      // Use squared comparison to avoid sqrt/hypot in the hot loop
+      const speedSq = this.tipVX * this.tipVX + this.tipVY * this.tipVY;
+      const targetAngle = speedSq > HEADING_VELOCITY_FLOOR_SQ
+        ? normalizeAngle(Math.atan2(this.tipVY, this.tipVX) - BASE_HEADING)
+        : 0;
+
+      const avHalf = this.angleVelocity + this.angleForce * halfDT;
+      const nextAngle = normalizeAngle(this.angle + avHalf * dt);
+      const angleError = normalizeAngle(targetAngle - nextAngle);
+      const angF = angleError * angStiff + angDrag * avHalf;
+      this.angleVelocity = avHalf + angF * halfDT;
+      this.angleForce = angF;
+      this.angle = normalizeAngle(nextAngle);
+
+      this.time += dt;
     }
 
     return this._renderState(idleAngleOffset);
   }
 
-  private _step(targetPos: Vec2, _idleAngleOffset: number): void {
-    const dt = TIP_SPRING.dt;
-    const halfDT = dt * 0.5;
-
-    // --- Tip position (2D Velocity-Verlet) ---
-    const tvHalfX = this.tipVelocity.x + this.tipForce.x * halfDT;
-    const tvHalfY = this.tipVelocity.y + this.tipForce.y * halfDT;
-    const nextTipX = this.tip!.x + tvHalfX * dt;
-    const nextTipY = this.tip!.y + tvHalfY * dt;
-    const dispX = targetPos.x - nextTipX;
-    const dispY = targetPos.y - nextTipY;
-    const tipForceX = dispX * TIP_SPRING.stiffness + (-TIP_SPRING.drag) * tvHalfX;
-    const tipForceY = dispY * TIP_SPRING.stiffness + (-TIP_SPRING.drag) * tvHalfY;
-    this.tipVelocity = { x: tvHalfX + tipForceX * halfDT, y: tvHalfY + tipForceY * halfDT };
-    this.tipForce = { x: tipForceX, y: tipForceY };
-    this.tip = { x: nextTipX, y: nextTipY };
-
-    // --- Angle (1D Velocity-Verlet) ---
-    const speed = Math.hypot(this.tipVelocity.x, this.tipVelocity.y);
-    let targetAngle: number;
-    if (speed > HEADING_VELOCITY_FLOOR) {
-      const heading = Math.atan2(this.tipVelocity.y, this.tipVelocity.x);
-      targetAngle = normalizeAngle(heading - BASE_HEADING);
-    } else {
-      targetAngle = 0;
-    }
-
-    const avHalf = this.angleVelocity + this.angleForce * halfDT;
-    const nextAngle = normalizeAngle(this.angle + avHalf * dt);
-    const angleError = normalizeAngle(targetAngle - nextAngle);
-    const angleForce = angleError * ANGLE_SPRING.stiffness + (-ANGLE_SPRING.drag) * avHalf;
-    this.angleVelocity = avHalf + angleForce * halfDT;
-    this.angleForce = angleForce;
-    this.angle = normalizeAngle(nextAngle);
-
-    this.time += dt;
-  }
-
   private _renderState(idleAngleOffset: number): DynamicsRenderState {
-    const speed = Math.hypot(this.tipVelocity.x, this.tipVelocity.y);
-    const clampedIdle = Math.max(-0.28, Math.min(0.28, idleAngleOffset));
+    const vx = this.tipVX;
+    const vy = this.tipVY;
+    // Use squared speed for comparisons, only sqrt when needed for output
+    const speedSq = vx * vx + vy * vy;
+    const clampedIdle = idleAngleOffset > 0.28 ? 0.28 : (idleAngleOffset < -0.28 ? -0.28 : idleAngleOffset);
     const rotation = normalizeAngle(this.angle + clampedIdle);
 
     let dirX: number, dirY: number;
-    if (speed > 0.001) {
-      dirX = this.tipVelocity.x / speed;
-      dirY = this.tipVelocity.y / speed;
+    let speed: number;
+    if (speedSq > 0.000001) {
+      speed = Math.sqrt(speedSq);
+      const invSpeed = 1 / speed;
+      dirX = vx * invSpeed;
+      dirY = vy * invSpeed;
     } else {
+      speed = 0;
       const fallbackAngle = BASE_HEADING + idleAngleOffset;
       dirX = Math.cos(fallbackAngle);
       dirY = Math.sin(fallbackAngle);
     }
 
-    const bodyMag = -Math.min(speed * BODY_OFFSET_SCALE, BODY_OFFSET_MAX);
+    const bodyMag = -(speed * BODY_OFFSET_SCALE > BODY_OFFSET_MAX ? BODY_OFFSET_MAX : speed * BODY_OFFSET_SCALE);
     const bodyBackX = dirX * bodyMag;
     const bodyBackY = dirY * bodyMag;
 
-    const lateralAmount = Math.max(-BODY_LATERAL_MAX,
-      Math.min(BODY_LATERAL_MAX, this.angleVelocity * BODY_LATERAL_SCALE));
+    const rawLateral = this.angleVelocity * BODY_LATERAL_SCALE;
+    const lateralAmount = rawLateral > BODY_LATERAL_MAX ? BODY_LATERAL_MAX
+      : (rawLateral < -BODY_LATERAL_MAX ? -BODY_LATERAL_MAX : rawLateral);
     const lateralX = -dirY * lateralAmount;
     const lateralY = dirX * lateralAmount;
 
-    const bodyOffset: Vec2 = { x: bodyBackX + lateralX, y: bodyBackY + lateralY };
+    const fogMag = -(speed * FOG_OFFSET_SCALE > FOG_OFFSET_MAX ? FOG_OFFSET_MAX : speed * FOG_OFFSET_SCALE);
 
-    const fogMag = -Math.min(speed * FOG_OFFSET_SCALE, FOG_OFFSET_MAX);
-    const fogOffset: Vec2 = {
-      x: dirX * fogMag + lateralX * 0.6,
-      y: dirY * fogMag + lateralY * 0.6,
-    };
-
-    const fogOpacity = Math.min(FOG_OPACITY_BASE + speed * FOG_OPACITY_VEL_SCALE, 0.34);
-    const fogScale = 1 + Math.min(speed * FOG_SCALE_VEL_SCALE, FOG_SCALE_MAX_DELTA);
-
-    return {
-      tip: this.tip!,
-      angle: rotation,
-      velocity: this.tipVelocity,
-      angleVelocity: this.angleVelocity,
-      bodyOffset,
-      fogOffset,
-      fogOpacity,
-      fogScale,
-    };
+    // Write into pre-allocated output object — zero allocation
+    const out = _renderOut;
+    out.tip.x = this.tipX;
+    out.tip.y = this.tipY;
+    out.angle = rotation;
+    out.velocity.x = vx;
+    out.velocity.y = vy;
+    out.angleVelocity = this.angleVelocity;
+    out.bodyOffset.x = bodyBackX + lateralX;
+    out.bodyOffset.y = bodyBackY + lateralY;
+    out.fogOffset.x = dirX * fogMag + lateralX * 0.6;
+    out.fogOffset.y = dirY * fogMag + lateralY * 0.6;
+    out.fogOpacity = FOG_OPACITY_BASE + speed * FOG_OPACITY_VEL_SCALE > 0.34 ? 0.34 : FOG_OPACITY_BASE + speed * FOG_OPACITY_VEL_SCALE;
+    out.fogScale = 1 + (speed * FOG_SCALE_VEL_SCALE > FOG_SCALE_MAX_DELTA ? FOG_SCALE_MAX_DELTA : speed * FOG_SCALE_VEL_SCALE);
+    return out;
   }
 }
 
@@ -204,9 +235,28 @@ interface MoveState {
   candidate: Candidate;
   candidates: Candidate[];
   progress: number;
-  spring: SpringState;
+  springVelocity: number;
+  springForce: number;
+  springTime: number;
   target: Vec2;
 }
+
+// Pre-allocated VisualState object — reused every frame to avoid GC.
+const _frameState: VisualState = {
+  phase: 'idle',
+  sample: { x: 0, y: 0 },
+  tip: { x: 0, y: 0 },
+  angle: 0,
+  heading: { x: 1, y: 0 },
+  velocity: { x: 0, y: 0 },
+  bodyOffset: { x: 0, y: 0 },
+  fogOffset: { x: 0, y: 0 },
+  fogOpacity: 0,
+  fogScale: 1,
+  clickProgress: 0,
+  candidate: null,
+  candidates: null,
+};
 
 export class CursorMotionEngine {
   bounds: Bounds | null;
@@ -259,7 +309,7 @@ export class CursorMotionEngine {
     this.clickProgress = 0;
 
     this.dynamics = new VisualDynamics();
-    this.dynamics.reset(this.position);
+    this.dynamics.reset(this.position.x, this.position.y);
 
     this._emit({ kind: 'init' });
     if (this.idleEnabled) this._startIdle();
@@ -279,7 +329,7 @@ export class CursorMotionEngine {
     return {
       phase: this.phase,
       position: this.position,
-      tip: this.dynamics.tip ?? this.position,
+      tip: { x: this.dynamics.tipX, y: this.dynamics.tipY },
       angle: this.dynamics.angle,
       heading: this.heading,
       clickProgress: this.clickProgress,
@@ -294,15 +344,16 @@ export class CursorMotionEngine {
     }
 
     const start: Vec2 = { x: this.position.x, y: this.position.y };
-    const startForward: Vec2 = { ...this.heading };
-    const endForward: Vec2 = { ...this.restingHeading };
+    const startForward: Vec2 = { x: this.heading.x, y: this.heading.y };
+    const endForward: Vec2 = { x: this.restingHeading.x, y: this.restingHeading.y };
     const candidates = makeCandidates({
       start, end: target, bounds: this.bounds,
       startForward, endForward, params: this.params,
     });
     const chosen = chooseCandidate(candidates);
     if (!chosen) {
-      this.position = { ...target };
+      this.position.x = target.x;
+      this.position.y = target.y;
       this._emit({ kind: 'move-skip' });
       return Promise.resolve();
     }
@@ -319,10 +370,13 @@ export class CursorMotionEngine {
         candidate: chosen,
         candidates,
         progress: 0,
-        spring: makeSpringState(),
-        target: { ...target },
+        springVelocity: 0,
+        springForce: 0,
+        springTime: 0,
+        target: { x: target.x, y: target.y },
       };
-      this.target = { ...target };
+      this.target.x = target.x;
+      this.target.y = target.y;
       this._ensureLoop();
     });
   }
@@ -346,7 +400,7 @@ export class CursorMotionEngine {
           const elapsed = performance.now() - start;
           const t = Math.min(elapsed / holdMs, 1);
           this.clickProgress = Math.sin(t * Math.PI);
-          this._emitFrame(performance.now() / 1000);
+          this._emitFrame(performance.now() / 1000, 0);
           if (t < 1) {
             requestAnimationFrame(tick);
           } else {
@@ -367,7 +421,10 @@ export class CursorMotionEngine {
 
   stop({ snapToTarget = false } = {}): void {
     if (this._currentMove) {
-      if (snapToTarget) this.position = { ...this._currentMove.target };
+      if (snapToTarget) {
+        this.position.x = this._currentMove.target.x;
+        this.position.y = this._currentMove.target.y;
+      }
       this._currentMove.reject?.(new Error('stopped'));
       this._currentMove = null;
     }
@@ -407,33 +464,60 @@ export class CursorMotionEngine {
 
   private _step(now: number): void {
     const rawDelta = this._lastStepTime != null ? (now - this._lastStepTime) : (1 / 60);
-    const clampedDelta = Math.max(1 / 240, Math.min(rawDelta, 1 / 24));
+    const clampedDelta = rawDelta < (1 / 240) ? (1 / 240) : (rawDelta > (1 / 24) ? (1 / 24) : rawDelta);
     this._lastStepTime = now;
 
     if (this._currentMove) {
       const move = this._currentMove;
       if (move.startTime == null) move.startTime = now;
       const elapsed = now - move.startTime;
-      const normalized = Math.max(0, Math.min(elapsed / this.duration, 1));
+      const normalized = elapsed <= 0 ? 0 : (elapsed >= this.duration ? 1 : elapsed / this.duration);
       const targetSpringTime = normalized * this.duration;
-      const [progress, springState] = advanceTo(move.progress, 1, move.spring, targetSpringTime, this.spring);
-      move.progress = progress;
-      move.spring = springState;
 
-      const sample = samplePath(move.path, progress);
-      this.position = sample.point;
-      this.heading = sample.tangent;
+      // Inline mutable spring advance — zero allocation
+      const cfg = this.spring;
+      const sDt = cfg.dt;
+      const sHalfDt = sDt * 0.5;
+      let cur = move.progress;
+      let sVel = move.springVelocity;
+      let sForce = move.springForce;
+      let sTime = move.springTime;
 
-      this._emitFrame(now);
+      // Stale-time clamp
+      if ((targetSpringTime - sTime) > 1) {
+        sTime = targetSpringTime - 1 / 60;
+      }
+      while (sTime < targetSpringTime) {
+        const vHalf = sVel + sForce * sHalfDt;
+        const next = cur + vHalf * sDt;
+        const f = cfg.stiffness * (1 - next) + (-cfg.drag) * vHalf;
+        sVel = vHalf + f * sHalfDt;
+        sForce = f;
+        cur = next;
+        sTime += sDt;
+      }
+      move.progress = cur;
+      move.springVelocity = sVel;
+      move.springForce = sForce;
+      move.springTime = sTime;
 
-      if (normalized >= 1 || isCloseEnough(progress, 1, this.spring)) {
-        this.position = { ...move.target };
+      const sample = samplePath(move.path, cur);
+      this.position.x = sample.point.x;
+      this.position.y = sample.point.y;
+      this.heading.x = sample.tangent.x;
+      this.heading.y = sample.tangent.y;
+
+      this._emitFrame(now, 0);
+
+      if (normalized >= 1 || isCloseEnough(cur, 1, this.spring)) {
+        this.position.x = move.target.x;
+        this.position.y = move.target.y;
         const resolve = move.resolve;
         this._currentMove = null;
         this._setPhase('idle');
         this._settleStartTime = now;
         this._ensureLoop();
-        this._emitFrame(now);
+        this._emitFrame(now, 0);
         resolve?.();
       }
     } else if (this.phase === 'idle') {
@@ -441,14 +525,14 @@ export class CursorMotionEngine {
       const idleAngleOffset = this.idleEnabled
         ? Math.sin(this.idlePhase * 0.8) * WOBBLE_AMPLITUDE
         : 0;
-      this._emitFrame(now, { idleAngleOffset });
+      this._emitFrame(now, idleAngleOffset);
 
-      const tipSpeed = Math.hypot(
-        this.dynamics.tipVelocity.x,
-        this.dynamics.tipVelocity.y,
-      );
+      // Stop loop once settled
+      const vx = this.dynamics.tipVX;
+      const vy = this.dynamics.tipVY;
+      const tipSpeedSq = vx * vx + vy * vy;
       const settleElapsed = now - (this._settleStartTime ?? now);
-      const isSettled = tipSpeed < 2 && Math.abs(this.dynamics.angle) < 0.02;
+      const isSettled = tipSpeedSq < 4 && Math.abs(this.dynamics.angle) < 0.02;
       if (!this.idleEnabled && isSettled && settleElapsed > 0.3) {
         if (this._rafId != null) {
           cancelAnimationFrame(this._rafId);
@@ -458,23 +542,30 @@ export class CursorMotionEngine {
     }
   }
 
-  private _emitFrame(now: number, { idleAngleOffset = 0 } = {}): void {
-    const visual = this.dynamics.advance(this.position, now, { idleAngleOffset });
-    this.onUpdate({
-      phase: this.phase,
-      sample: this.position,
-      tip: visual.tip,
-      angle: visual.angle,
-      heading: this.heading,
-      velocity: visual.velocity,
-      bodyOffset: visual.bodyOffset,
-      fogOffset: visual.fogOffset,
-      fogOpacity: visual.fogOpacity,
-      fogScale: visual.fogScale,
-      clickProgress: this.clickProgress,
-      candidate: this._currentMove?.candidate ?? null,
-      candidates: this._currentMove?.candidates ?? null,
-    });
+  private _emitFrame(now: number, idleAngleOffset: number): void {
+    const visual = this.dynamics.advance(this.position.x, this.position.y, now, idleAngleOffset);
+    // Write into pre-allocated frame state
+    const f = _frameState;
+    f.phase = this.phase;
+    f.sample.x = this.position.x;
+    f.sample.y = this.position.y;
+    f.tip.x = visual.tip.x;
+    f.tip.y = visual.tip.y;
+    f.angle = visual.angle;
+    f.heading.x = this.heading.x;
+    f.heading.y = this.heading.y;
+    f.velocity.x = visual.velocity.x;
+    f.velocity.y = visual.velocity.y;
+    f.bodyOffset.x = visual.bodyOffset.x;
+    f.bodyOffset.y = visual.bodyOffset.y;
+    f.fogOffset.x = visual.fogOffset.x;
+    f.fogOffset.y = visual.fogOffset.y;
+    f.fogOpacity = visual.fogOpacity;
+    f.fogScale = visual.fogScale;
+    f.clickProgress = this.clickProgress;
+    f.candidate = this._currentMove?.candidate ?? null;
+    f.candidates = this._currentMove?.candidates ?? null;
+    this.onUpdate(f);
   }
 
   private _emit(_event: { kind: string }): void { /* reserved */ }

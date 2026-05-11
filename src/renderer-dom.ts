@@ -2,15 +2,14 @@
 // soft cursor (tip + glow + click pulse) on top of any web page or
 // container. No external dependencies.
 //
-// The glyph matches the official runtime overlay: dark charcoal (near-black)
-// fill with white stroke, neutral orientation pointing upper-left (-135°).
-// The pointer path is derived from the SynthesizedCursorGlyphView contourRows.
-// The fog/glow is rendered as a separate element for independent offset/scale.
+// Performance-optimized:
+// - Fog element cached at construction (no querySelector per frame)
+// - Transform string assembled only when values change (dirty check)
+// - Minimal DOM writes
 
 import type { Vec2, Candidate, VisualState, DomRendererOptions, Path } from './types.js';
 
 // Pointer shape derived from the SynthesizedCursorGlyphView contourRows data.
-// Coordinate system: 48x48 viewBox, tip at (14.4, 7.0) = (30%, 14.6%).
 const POINTER_PATH = 'M13.3 7.0 L11.9 8.7 L11.2 10.3 L11.9 12.0 L11.9 13.6 L12.6 15.3 L12.6 16.9 L12.6 18.6 L13.3 20.2 L13.3 21.9 L14.0 23.6 L14.0 25.2 L14.8 26.9 L14.8 28.5 L15.5 30.2 L16.2 31.0 L19.0 31.0 L19.8 29.3 L21.2 27.7 L21.9 26.0 L22.6 24.4 L24.8 22.7 L28.3 21.1 L30.5 19.4 L30.5 17.8 L30.5 16.1 L29.8 14.4 L26.9 12.8 L23.3 11.1 L20.5 9.5 L17.6 7.8 L15.5 7.0 Z';
 
 const DEFAULT_GLYPH_SVG = `
@@ -42,7 +41,14 @@ export class DomCursorRenderer {
   svg: SVGSVGElement;
   glyph: HTMLDivElement;
 
+  // Cached fog element — avoids querySelector per frame.
+  private _fogEl: SVGElement | null = null;
   private _trailPoints: Vec2[] = [];
+
+  // Dirty-check state to skip redundant DOM writes.
+  private _lastTransform: string = '';
+  private _lastFogTransform: string = '';
+  private _lastFogOpacity: string = '';
 
   constructor({
     container = document.body,
@@ -93,6 +99,9 @@ export class DomCursorRenderer {
     this.glyph.innerHTML = glyphHTML;
     this.root.appendChild(this.glyph);
 
+    // Cache fog element reference.
+    this._fogEl = this.glyph.querySelector('.cm-fog-circle') as SVGElement | null;
+
     this.container.style.position = this.container.style.position || 'relative';
     this.container.appendChild(this.root);
   }
@@ -103,29 +112,45 @@ export class DomCursorRenderer {
     if (!tip) return;
 
     // Motion compression: subtle squash along velocity
-    const bodyMag = Math.hypot(bodyOffset?.x ?? 0, bodyOffset?.y ?? 0);
-    const motionComp = Math.min(bodyMag * 0.008, 0.018);
+    const bx = bodyOffset.x;
+    const by = bodyOffset.y;
+    const bodyMag = Math.sqrt(bx * bx + by * by); // faster than hypot for known 2D
+    const motionComp = bodyMag * 0.008 > 0.018 ? 0.018 : bodyMag * 0.008;
     const pulseComp = clickProgress * 0.03;
     const scX = 1 - motionComp - pulseComp;
     const scY = 1 + (pulseComp * 0.4);
 
-    const bx = bodyOffset?.x ?? 0;
-    const by = bodyOffset?.y ?? 0;
-    this.glyph.style.transform =
-      `translate(${tip.x + bx}px, ${tip.y + by}px) translate(-30%, -14%) ` +
-      `rotate(${angle}rad) scale(${scX}, ${scY})`;
+    // Build transform string
+    const tx = tip.x + bx;
+    const ty = tip.y + by;
+    const transform = `translate(${tx}px,${ty}px) translate(-30%,-14%) rotate(${angle}rad) scale(${scX},${scY})`;
 
-    // Update fog circle
-    const fogEl = this.glyph.querySelector('.cm-fog-circle') as SVGElement | null;
+    // Only write to DOM if changed (string comparison is cheaper than forced layout)
+    if (transform !== this._lastTransform) {
+      this.glyph.style.transform = transform;
+      this._lastTransform = transform;
+    }
+
+    // Update fog circle — cached element, no querySelector
+    const fogEl = this._fogEl;
     if (fogEl) {
-      const fox = fogOffset?.x ?? 0;
-      const foy = fogOffset?.y ?? 0;
-      const fs = fogScale ?? 1;
-      const fo = fogOpacity ?? 0.12;
-      const opacityMul = Math.max(0.28, Math.min(fo / 0.12, 2.2));
-      fogEl.style.opacity = String(Math.min(opacityMul, 1));
-      fogEl.setAttribute('transform', `translate(${fox * 0.7} ${foy * 0.7}) scale(${fs})`);
-      fogEl.setAttribute('transform-origin', '24 24');
+      const fox = fogOffset.x;
+      const foy = fogOffset.y;
+      const fs = fogScale;
+      const fo = fogOpacity;
+      const opacityMul = fo / 0.12;
+      const clampedOpacity = opacityMul < 0.28 ? 0.28 : (opacityMul > 1 ? 1 : opacityMul);
+      const opacityStr = String(clampedOpacity);
+      if (opacityStr !== this._lastFogOpacity) {
+        fogEl.style.opacity = opacityStr;
+        this._lastFogOpacity = opacityStr;
+      }
+      const fogTransform = `translate(${fox * 0.7} ${foy * 0.7}) scale(${fs})`;
+      if (fogTransform !== this._lastFogTransform) {
+        fogEl.setAttribute('transform', fogTransform);
+        fogEl.setAttribute('transform-origin', '24 24');
+        this._lastFogTransform = fogTransform;
+      }
     }
 
     if (this.showTrail) {
