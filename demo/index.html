@@ -694,8 +694,39 @@ function mkPath(d,stroke,w,dash='',op=1){const e=document.createElementNS(svgNS,
 function mkDot(x,y,r,fill,stroke='none',sw=0){const e=document.createElementNS(svgNS,'circle');e.setAttribute('cx',x);e.setAttribute('cy',y);e.setAttribute('r',r);e.setAttribute('fill',fill);if(stroke!=='none'){e.setAttribute('stroke',stroke);e.setAttribute('stroke-width',sw);}return e;}
 
 // Cursor glyph
-const PTR_D='M13.3 7.0 L11.9 8.7 L11.2 10.3 L11.9 12.0 L11.9 13.6 L12.6 15.3 L12.6 16.9 L12.6 18.6 L13.3 20.2 L13.3 21.9 L14.0 23.6 L14.0 25.2 L14.8 26.9 L14.8 28.5 L15.5 30.2 L16.2 31.0 L19.0 31.0 L19.8 29.3 L21.2 27.7 L21.9 26.0 L22.6 24.4 L24.8 22.7 L28.3 21.1 L30.5 19.4 L30.5 17.8 L30.5 16.1 L29.8 14.4 L26.9 12.8 L23.3 11.1 L20.5 9.5 L17.6 7.8 L15.5 7.0 Z';
-function mkCursor(){const g=document.createElementNS(svgNS,'g');const fog=document.createElementNS(svgNS,'circle');fog.setAttribute('r','16');fog.setAttribute('fill','rgba(97,92,89,0.1)');g.appendChild(fog);const pg=document.createElementNS(svgNS,'g');const pp=document.createElementNS(svgNS,'path');pp.setAttribute('d',PTR_D);pp.setAttribute('fill','rgba(40,40,40,0.95)');pp.setAttribute('stroke','rgba(255,255,255,0.82)');pp.setAttribute('stroke-width','1.4');pp.setAttribute('stroke-linejoin','round');pp.setAttribute('stroke-linecap','round');pg.appendChild(pp);g.appendChild(pg);return g;}
+// macOS-style arrow cursor: white fill, dark stroke, tip at top-left
+const PTR_D='M2 1 L2 19 L6.5 15.5 L9.5 21.5 L12 20.5 L9 14.5 L14.5 14 Z';
+function mkCursor(){
+  const g=document.createElementNS(svgNS,'g');
+  // Fog circle (preserved)
+  const fog=document.createElementNS(svgNS,'circle');
+  fog.setAttribute('r','20');
+  fog.setAttribute('fill','rgba(80,80,80,0.10)');
+  fog.setAttribute('filter','');
+  g.appendChild(fog);
+  // Add a subtle blur for fog
+  const defs=document.createElementNS(svgNS,'defs');
+  const filt=document.createElementNS(svgNS,'filter');
+  filt.setAttribute('id','fog-blur');
+  const blur=document.createElementNS(svgNS,'feGaussianBlur');
+  blur.setAttribute('stdDeviation','3');
+  filt.appendChild(blur);
+  defs.appendChild(filt);
+  g.appendChild(defs);
+  fog.setAttribute('filter','url(#fog-blur)');
+  // Pointer shape
+  const pg=document.createElementNS(svgNS,'g');
+  const pp=document.createElementNS(svgNS,'path');
+  pp.setAttribute('d',PTR_D);
+  pp.setAttribute('fill','#ffffff');
+  pp.setAttribute('stroke','#1d1d1f');
+  pp.setAttribute('stroke-width','1.8');
+  pp.setAttribute('stroke-linejoin','round');
+  pp.setAttribute('stroke-linecap','round');
+  pg.appendChild(pp);
+  g.appendChild(pg);
+  return g;
+}
 
 // ============ STATE ============
 let curPos=null; // current cursor position (always set)
@@ -802,7 +833,7 @@ function runAnim(){
     const spd=Math.sqrt(tvx*tvx+tvy*tvy);
     if(spd>1)heading=norm({x:tvx,y:tvy});
     draw();
-    if(cursorGlyph&&showCursor)cursorGlyph.setAttribute('transform',`translate(${tipX},${tipY}) rotate(${ang*180/Math.PI}) scale(0.55) translate(-14.4,-7)`);
+    if(cursorGlyph&&showCursor)cursorGlyph.setAttribute('transform',`translate(${tipX},${tipY}) rotate(${ang*180/Math.PI}) scale(1.2) translate(-2,-1)`);
     fc++;
 
     if(n2>=1&&prog>=0.99){
@@ -812,7 +843,7 @@ function runAnim(){
       endPoint=null;candidates=null;chosen=null;
       isAnimating=false;
       draw();
-      if(cursorGlyph&&showCursor)cursorGlyph.setAttribute('transform',`translate(${tipX},${tipY}) rotate(${ang*180/Math.PI}) scale(0.55) translate(-14.4,-7)`);
+      if(cursorGlyph&&showCursor)cursorGlyph.setAttribute('transform',`translate(${tipX},${tipY}) rotate(${ang*180/Math.PI}) scale(1.2) translate(-2,-1)`);
       pgStatus.textContent='Click anywhere to move';
       pgStatus.classList.remove('hidden');
       return;
