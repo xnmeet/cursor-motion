@@ -1,4 +1,4 @@
-# cursor-motion-js
+# cursor-motion
 
 Natural, spring-based cursor motion for the web. A direct JavaScript port of the cursor motion model used in [`iFurySt/open-codex-computer-use`](https://github.com/iFurySt/open-codex-computer-use), itself reverse-engineered from OpenAI Codex Computer Use.
 
@@ -31,7 +31,7 @@ Natural, spring-based cursor motion for the web. A direct JavaScript port of the
 Run the bundled demo:
 
 ```bash
-cd cursor-motion-js
+cd cursor-motion
 npm run demo
 # open http://localhost:8765/demo/
 ```
@@ -52,7 +52,7 @@ Four layers, mirroring the original Swift implementation:
 You can use any subset:
 
 ```js
-import { makeCandidates, chooseCandidate, samplePath } from 'cursor-motion-js';
+import { makeCandidates, chooseCandidate, samplePath } from 'cursor-motion';
 
 const cands = makeCandidates({ start, end, bounds, startForward, endForward });
 const best = chooseCandidate(cands);

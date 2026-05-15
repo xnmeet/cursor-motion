@@ -1,5 +1,5 @@
 {
-  "name": "cursor-motion-js",
+  "name": "cursor-motion",
   "version": "0.2.0",
   "description": "Natural, spring-based cursor motion for the web. Port of the Codex Computer Use cursor motion model (open-codex-computer-use).",
   "type": "module",
