@@ -112,24 +112,24 @@ function installCursorMotionBrowserRuntime(options: BrowserRuntimeOptions): void
     }, 700);
   }
 
-  win[options.moveGlobal] = (x: number, y: number, animate = true): void => {
-    if (!finitePoint(x, y)) return;
+  win[options.moveGlobal] = (x: number, y: number, animate = true): Promise<void> => {
+    if (!finitePoint(x, y)) return Promise.resolve();
     const target = { x, y };
     if (!hasPosition || animate === false) {
       createEngine(target);
-      return;
+      return Promise.resolve();
     }
-    ensureEngine(target).moveTo(target).catch(() => {
+    return ensureEngine(target).moveTo(target).catch(() => {
       // Superseded movement is expected when calls overlap.
     });
   };
 
-  win[options.clickGlobal] = (x: number, y: number): void => {
-    if (!finitePoint(x, y)) return;
+  win[options.clickGlobal] = (x: number, y: number): Promise<void> => {
+    if (!finitePoint(x, y)) return Promise.resolve();
     const target = { x, y };
     if (!hasPosition) createEngine(target);
     spawnBloom(x, y);
-    ensureEngine(target).click().catch(() => {
+    return ensureEngine(target).click().catch(() => {
       // Click animation is decorative; ignore visual-only failures.
     });
   };
