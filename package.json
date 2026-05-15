@@ -1,6 +1,6 @@
 {
   "name": "cursor-motion",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Natural, spring-based cursor motion for the web. Port of the Codex Computer Use cursor motion model (open-codex-computer-use).",
   "type": "module",
   "main": "dist/index.js",
@@ -35,6 +35,16 @@
       "types": "./dist/renderer-dom.d.ts",
       "import": "./dist/renderer-dom.js"
     },
+    "./browser": {
+      "import": {
+        "types": "./dist/browser.d.ts",
+        "default": "./dist/browser.js"
+      },
+      "require": {
+        "types": "./dist/browser.d.cts",
+        "default": "./dist/browser.cjs"
+      }
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
@@ -42,7 +52,7 @@
   },
   "files": ["dist", "src", "README.md"],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/build-browser-cjs.mjs",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
