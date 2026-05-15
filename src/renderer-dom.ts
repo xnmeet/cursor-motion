@@ -17,13 +17,16 @@ const DEFAULT_GLYPH_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="overflow:visible">
   <defs>
     <radialGradient id="cm-fog">
-      <stop offset="0%" stop-color="rgba(97,92,89,0.40)"/>
-      <stop offset="50%" stop-color="rgba(110,105,102,0.28)"/>
-      <stop offset="82%" stop-color="rgba(117,112,110,0.11)"/>
-      <stop offset="100%" stop-color="rgba(153,153,153,0)"/>
+      <stop offset="0%" stop-color="rgba(79,120,255,0.24)"/>
+      <stop offset="44%" stop-color="rgba(109,142,255,0.13)"/>
+      <stop offset="72%" stop-color="rgba(31,41,55,0.045)"/>
+      <stop offset="100%" stop-color="rgba(31,41,55,0)"/>
     </radialGradient>
+    <filter id="cm-fog-blur" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="3.8"/>
+    </filter>
   </defs>
-  <circle class="cm-fog-circle" cx="24" cy="24" r="33" fill="url(#cm-fog)"/>
+  <circle class="cm-fog-circle" cx="24" cy="24" r="25" fill="url(#cm-fog)" filter="url(#cm-fog-blur)"/>
   <path class="cm-pointer" d="${POINTER_PATH}"
         transform="${POINTER_TRACE_TRANSFORM}"
         vector-effect="non-scaling-stroke"
@@ -141,14 +144,15 @@ export class DomCursorRenderer {
       const foy = fogOffset.y;
       const fs = fogScale;
       const fo = fogOpacity;
-      const opacityMul = fo / 0.12;
-      const clampedOpacity = opacityMul < 0.28 ? 0.28 : (opacityMul > 1 ? 1 : opacityMul);
+      const opacityMul = fo / 0.34;
+      const clampedOpacity = opacityMul < 0.18 ? 0.18 : (opacityMul > 0.68 ? 0.68 : opacityMul);
       const opacityStr = String(clampedOpacity);
       if (opacityStr !== this._lastFogOpacity) {
         fogEl.style.opacity = opacityStr;
         this._lastFogOpacity = opacityStr;
       }
-      const fogTransform = `translate(${fox * 0.7} ${foy * 0.7}) scale(${fs})`;
+      const softenedScale = 0.94 + ((fs - 1) * 0.62);
+      const fogTransform = `translate(${fox * 0.48} ${foy * 0.48}) scale(${softenedScale})`;
       if (fogTransform !== this._lastFogTransform) {
         fogEl.setAttribute('transform', fogTransform);
         fogEl.setAttribute('transform-origin', '24 24');
